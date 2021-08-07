@@ -10,7 +10,7 @@ To compare the simulation results with those using *EMLP* proposed in [A Practic
 ## Experimental Results from Paper
 To run the scripts you will need to clone the repo and install it locally which you can do with
 ```
-!git clone https://github.com/ElainaLight/Comparison_EMLP.git
+!git clone https://github.com/Pamplemousse-Elaina/Comparison_EMLP.git
 cd equivariant-MLP
 pip install -e .
 ```
