@@ -2,7 +2,7 @@
 
 Scalar products and scalar contractions of the scalar, vector, and tensor inputs are powerful. Deep learning models using these scalars respect the gauge symmetries—or coordinate freedom—of physical law.
 
-This repository provides codes to construct invariant and equivariant neural networks on the same sythetic datasets used in ICML2021 paper [A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups](https://arxiv.org/abs/2104.09459) 
+This repository provides codes to construct invariant and equivariant neural networks on the same datasets used in ICML2021 paper [A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups](https://arxiv.org/abs/2104.09459) 
 
 To compare the simulation results with those using *EMLP* proposed in [A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups](https://arxiv.org/abs/2104.09459), this repository imported codes from [equivariant-MLP](https://github.com/mfinzi/equivariant-MLP.git). 
 
@@ -15,14 +15,15 @@ cd equivariant-MLP
 pip install -e .
 ```
 
-### `O(5)`-invariant task
+### Synthetic Experiments
+#### `O(5)`-invariant task
 Evaluation on a synthetic `O(5)` invariant regression problem `2T1 → T0` in `d = 5` dimensions given by the function
 `f(x1,x2) = sin(||x1||) - ||x2||^3/2 + <x1, x2>/(||x1||*||x2||)`.
 See Section 7.1 in [A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups](https://arxiv.org/abs/2104.09459) for more details. 
 
 The neural networks used for this example are multi-layer perceptrons based on the inner products `<x1,x1>, <x1,x2>, <x2,x2>`.
 
-Given 3000 training datasets, you can run the following codes with `ntrain=3000`, which produce the test MSE results from  the neural networks based on the scalars `<xi,xj>, i,j=1,2`.
+For example, given 3000 training datasets, you can run the following codes with `ntrain=3000`, which produce the test MSE results from  the neural networks based on the scalars `<xi,xj>, i,j=1,2`.
 ```python
 import pytorch_lightning as pl
 from train_regression_scalars import makeTrainerScalars
@@ -57,11 +58,11 @@ test_mse = makeTrainerScalars(
 
 ```
 
-### `O(3)`-equivariant task
+#### `O(3)`-equivariant task
 This task is to predicting the moment of inertia matrix from `n=5` point masses and positions. 
 The inputs `X = {(m_i,x_i)}_{i=1}^5` are of type `5T0+5T1` (5 scalars and vectors) and outputs are of type `T2` (a matrix), both transform under the group. See Section 7.1 in [A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups](https://arxiv.org/abs/2104.09459) for more details. 
 
-Given 3000 training datasets, you can run the following codes with `ntrain=3000`, which produce the test MSE results from  the neural networks based on the scalars `<xi,xj>, i,j=1,...,5`, which are designed to be equivariant and permutation invariant.
+For example, given 3000 training datasets, you can run the following codes with `ntrain=3000`, which produce the test MSE results from  the neural networks based on the scalars `<xi,xj>, i,j=1,...,5`, which are designed to be equivariant and permutation invariant.
 ```python
 import pytorch_lightning as pl
 from train_regression_scalars import makeTrainerScalars
@@ -91,7 +92,12 @@ test_mse = makeTrainerScalars(
   progress_bar=True
 )
 ```
- 
+
+#### Figures to visualize comparison results for the above two examples
+![GitHub Logo](https://github.com/ElainaLight/Comparison_EMLP/tree/master/docs/notebooks/data_efficiency_Inertia.png)
+![GitHub Logo](https://github.com/ElainaLight/Comparison_EMLP/tree/master/docs/notebooks/data_efficiency_O5Synthetic.png) 
+
+
 ### Modeling dynamical systems with symmetries
 For the dynamical systems modeling experiments you can use the scripts
  [`experiments/hnn_scalars.py`](https://github.com/ElainaLight/Comparison_EMLP/blob/master/experiments/hnn_scalars.py) to train (equivariant) Hamiltonian Neural Networks using scalars construction.  
