@@ -11,7 +11,7 @@ To compare the simulation results with those using *EMLP* proposed in [A Practic
 To run the scripts you will need to clone the repo and install it locally which you can do with
 ```
 !git clone https://github.com/Pamplemousse-Elaina/Comparison_EMLP.git
-cd equivariant-MLP
+cd Comparison_EMLP
 pip install -e .
 ```
 
