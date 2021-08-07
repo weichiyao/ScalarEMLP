@@ -94,7 +94,8 @@ test_mse = makeTrainerScalars(
 ```
 
 #### Figures to visualize comparison results for the above two examples
-<img src="https://github.com/ElainaLight/Comparison_EMLP/tree/master/docs/notebooks/imgs/data_efficiency_O5Synthetic.png" width="200"/> <img src="https://github.com/ElainaLight/Comparison_EMLP/tree/master/docs/notebooks/imgs/data_efficiency_Inertia.png" width="200"/>
+
+<img src="https://github.com/ElainaLight/Comparison_EMLP/tree/master/docs/notebooks/imgs/data_efficiency_O5Synthetic.png" /> <img src="https://github.com/ElainaLight/Comparison_EMLP/tree/master/docs/notebooks/imgs/data_efficiency_Inertia.png" />
 
 
 ### Modeling dynamical systems with symmetries
