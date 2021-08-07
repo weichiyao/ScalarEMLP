@@ -110,4 +110,4 @@ The following table shows geometric mean of rollout errors (relative error) over
 
 Methods | Scalars | EMLP-O(2) | EMLP-SO(2) | EMLP-D6 | MLP
 ---------- | ---------- | ---------- | ---------- | ---------- | ----------
-HNNs | 0.006(2) | 0.012(2) | 0.015(3) | 0.013(2) | 0.028 
+HNNs | 0.007(2) | 0.012(2) | 0.015(3) | 0.013(2) | 0.028 
