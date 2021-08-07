@@ -487,3 +487,31 @@ class ode_trial(object):
             outcome = e
         del trainer
         return cfg, outcome
+
+
+@export
+class hnnScalars_trial(object):
+    """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
+        Feel free to use your own."""
+    def __init__(self,make_trainer,strict=True):
+        self.make_trainer = make_trainer
+        self.strict=strict
+    def __call__(self,cfg):
+        try:
+            cfg.pop('local_rank',None) #TODO: properly handle distributed
+            resume = cfg.pop('resume',False)
+            save = cfg.pop('save',False)
+            trainer = self.make_trainer(**cfg)
+            trainer.logger.add_scalars('config',flatten_dict(cfg))
+            trainer.train(cfg['num_epochs'])
+            if save: cfg['saved_at']=trainer.save_checkpoint()
+            outcome = trainer.ckpt['outcome']
+            trajectories = []
+            for mb in trainer.dataloaders['test']:
+                trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
+            torch.save(np.concatenate(trajectories),f"./{cfg['network']}.t")
+        except Exception as e:
+            if self.strict: raise
+            outcome = e
+        del trainer
+        return cfg, outcome
