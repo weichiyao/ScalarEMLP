@@ -339,3 +339,80 @@ def gate_indices(sumrep): #TODO: add support for mixed_tensors
             num_nonscalars+=1
         i+=rep.size()
     return indices
+
+
+
+##############################################################################
+def comp_inner_products_jax(x, simplified=True):
+    """
+    INPUT:
+    N: number of datasets
+    n: number of particles
+    dim: dimension of each particle 
+    x: torch tensor of size [N, n, dim]
+    stype: "Euclidean" or "Minkowski"
+
+
+    OUTPUT:
+    scalars: torch tensor of size [N, n*(n+1)/2]
+    """
+   
+    n = x.shape[0]
+    xxsqrt = jnp.sqrt(jnp.einsum('bix,bix->bi', x, x)) # (n, 4)
+    scalars = jnp.einsum('bix,bjx->bij', x, x).reshape(n, -1) # (n, 16)
+    scalars = jnp.concatenate([xxsqrt, scalars], axis = -1)  # (n, 20)
+    return scalars 
+
+@export
+class BasicMLP_objax(objax.Module):
+    def __init__(
+        self, 
+        n_in, 
+        n_out,
+        n_hidden=100, 
+        n_layers=2, 
+    ):
+        super().__init__()
+        layers = [objax.nn.Linear(n_in, n_hidden), objax.functional.relu]
+        for _ in range(n_layers):
+            layers.append(objax.nn.Linear(n_hidden, n_hidden))
+            layers.append(objax.functional.relu)
+        layers.append(objax.nn.Linear(n_hidden, n_out))
+        
+        self.mlp = Sequential(*layers)
+    
+    def __call__(self,x,training=True):
+        return self.mlp(x)
+
+
+
+@export
+class InvarianceLayer_objax(objax.Module):
+    def __init__(
+        self, 
+        n_hidden, 
+        n_layers
+    ):
+        super().__init__()
+        self.mlp = BasicMLP_objax(
+          n_in=28, n_out=1, n_hidden=n_hidden, n_layers=n_layers
+        ) 
+       
+    def __call__(self,x,training=True):
+        x = x.reshape(-1,4,3)
+        xx = comp_inner_products_jax(x)  # (n,20)
+        g = jnp.array([0,0,-1])
+        xg = jnp.inner(g, x) # (n,4)
+        
+        y1 = x[:,1,:] - x[:,0,:]
+        y2 = x[:,3,:] - x[:,2,:]
+        yy1 = jnp.sum(y1*y1, axis = -1, keepdims=True) # (n,)
+        yy2 = jnp.sum(y2*y2, axis = -1, keepdims=True) # (n,)
+        yy = jnp.concatenate(
+            [yy1,jnp.sqrt(yy1),yy2,jnp.sqrt(yy2)], 
+            axis = -1
+        ) # (n,4)
+        scalars = jnp.concatenate([xx,xg,yy], axis=-1) # (n,28)
+        out = self.mlp(scalars)
+        return out.sum()
+
