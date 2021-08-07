@@ -102,7 +102,7 @@ test_mse = makeTrainerScalars(
 For the dynamical systems modeling experiments you can use the scripts
  [`experiments/hnn_scalars.py`](https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/master/experiments/hnn_scalars.py) to train (equivariant) Hamiltonian Neural Networks using scalars construction.  
 ```
-python experiments/hnn_scalars.py --num_epochs=2000 --n_layers=3 --n_hidden 100 --bs 500 --lr 1e-3
+python experiments/hnn_scalars.py
 ```
 
 The following table shows geometric mean of rollout errors (relative error) over `T=30s` for the scalar HNNs vs the various EMLP-G symmetric HNNs vs ordinary MLP HNNs. Errorbars are 1 standard deviation computed over 3 trials, with notation `.012(2)` meaning `.012 ± .002`.
