@@ -95,12 +95,12 @@ test_mse = makeTrainerScalars(
 
 #### Figures to visualize comparison results for the above two examples
 
-<img src="https://github.com/ElainaLight/Comparison_EMLP/tree/master/docs/notebooks/imgs/data_efficiency_O5Synthetic.png" width="250"/> <img src="https://github.com/ElainaLight/Comparison_EMLP/tree/master/docs/notebooks/imgs/data_efficiency_Inertia.png" width="250"/>
+<img src="https://github.com/Pamplemousse-Elaina/Comparison_EMLP/tree/master/docs/notebooks/imgs/data_efficiency_O5Synthetic.png" width="250"/> <img src="https://github.com/Pamplemousse-Elaina/Comparison_EMLP/tree/master/docs/notebooks/imgs/data_efficiency_Inertia.png" width="250"/>
 
 
 ### Modeling dynamical systems with symmetries
 For the dynamical systems modeling experiments you can use the scripts
- [`experiments/hnn_scalars.py`](https://github.com/ElainaLight/Comparison_EMLP/blob/master/experiments/hnn_scalars.py) to train (equivariant) Hamiltonian Neural Networks using scalars construction.  
+ [`experiments/hnn_scalars.py`](https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/master/experiments/hnn_scalars.py) to train (equivariant) Hamiltonian Neural Networks using scalars construction.  
 ```
 python experiments/hnn_scalars.py --num_epochs=2000 --n_layers=3 --n_hidden 100 --bs 500 --lr 1e-3
 ```
