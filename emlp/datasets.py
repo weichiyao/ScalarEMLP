@@ -42,6 +42,7 @@ class Inertia(Dataset):
         #Ystd = np.sqrt(((self.Y-Ymean)**2).mean((0,1)))+ np.zeros_like(Ymean)
         Ystd = np.abs(self.Y-Ymean).mean((0,1)) + np.zeros_like(Ymean)
         self.stats =0,1,0,1#Xmean,Xstd,Ymean,Ystd
+        self.symname = "O3equivariant"
 
     def __getitem__(self,i):
         return (self.X[i],self.Y[i])
@@ -70,7 +71,7 @@ class O5Synthetic(Dataset):
         Xmean = self.X.mean(0) # can add and subtract arbitrary tensors
         Xscale = (np.sqrt((self.X.reshape(N,2,d)**2).mean((0,2)))[:,None]+0*ri[0].numpy()).reshape(self.dim)
         self.stats = 0,Xscale,self.Y.mean(axis=0),self.Y.std(axis=0)
-
+        self.symname = "O5invariant"
     def __getitem__(self,i):
         return (self.X[i],self.Y[i])
     def __len__(self):
@@ -103,6 +104,7 @@ class ParticleInteraction(Dataset):
         self.Xscale = np.sqrt((np.abs((self.X.reshape(N,4,4)@𝜂.numpy())*self.X.reshape(N,4,4)).mean(-1)).mean(0))
         self.Xscale = (self.Xscale[:,None]+np.zeros((4,4))).reshape(-1)
         self.stats = 0,self.Xscale,self.Y.mean(axis=0),self.Y.std(axis=0)#self.X.mean(axis=0),self.X.std(axis=0),
+        self.symname = "Lorentz"
     def __getitem__(self,i):
         return (self.X[i],self.Y[i])
     def __len__(self):
