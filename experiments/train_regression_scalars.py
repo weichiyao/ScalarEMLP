@@ -138,7 +138,10 @@ def restoreResults(
             n_in_net=base_trans['dim_scalars'],
             permutation=permutation
         ) 
-        
+    elif base_dataset.symname == "Lorentz":
+        litmodel = InvarianceNet(
+            n_in_net=base_trans['dim_scalars']
+        ) 
     
     if trainer_config is None:
         model_load = litmodel.load_from_checkpoint(path_ckpt)
