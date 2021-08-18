@@ -335,6 +335,16 @@ def train_pl_model(
             milestones=milestones,
             gamma=gamma
         )
+    elif symname == "Lorentz":
+        litmodel = InvarianceNet(
+            n_in_net=n_in_net,
+            n_hidden_mlp=n_hidden_mlp, 
+            n_layers_mlp=n_layers_mlp,
+            layer_norm_mlp=layer_norm_mlp, 
+            learning_rate=learning_rate,
+            milestones=milestones,
+            gamma=gamma
+        )
     else:
         raise ValueError("wrong symname???")
     
