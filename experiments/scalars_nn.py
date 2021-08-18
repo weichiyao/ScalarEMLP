@@ -69,6 +69,9 @@ def dataset_transform(data):
         mi2 = mi[:,index[:,1]]
         
         scalars = torch.stack((mi1,mi2,ri),dim=-1) # [N, 15, 3]
+    elif data.symname == "Lorentz":
+        X = X.reshape(-1,4,4)
+        scalars = comp_inner_products(X, stype="Minkowski")
     else:
         raise ValueError("Wrong symname???")
     dim_scalars = scalars.shape[-1]
