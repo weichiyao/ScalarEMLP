@@ -97,7 +97,43 @@ test_mse = makeTrainerScalars(
 )
 ```
 
-#### Figures to visualize comparison results for the above two examples
+#### Lorentz Equivariant Particle Scattering
+This task is to to test the ability of the model to handle *Lorentz equivariance* in tasks relevant to particle physics.
+The inputs are `4T(1,0)` and the output is a scalar `T(0,0)`. See Section 7.1 in [A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups](https://arxiv.org/abs/2104.09459) for more details. 
+
+For example, given 3000 training datasets, you can run the following codes with `ntrain=3000`, which produce the test MSE results from the neural networks based on the scalars, *Minkowski inner product* in terms of a metric `M`: `<x,y> = x'My`.
+
+```python
+import pytorch_lightning as pl
+from train_regression_scalars import makeTrainerScalars
+
+ntrain=3000
+trainer_config={
+    'log_dir':"/home/",
+    'lr':0.001,
+    'num_gpus':1,
+    'max_epochs':500,
+    'min_epochs':0,
+    'early_stopping':False,
+    'early_stopping_patience':3,
+    'check_val_every_n_epoch':1,
+    'milestones':[30,80,140,200,300],
+    'gamma':0.75,
+    'n_hidden_mlp':500, 
+    'n_layers_mlp':5,
+    'layer_norm_mlp':False
+}
+
+test_mse = makeTrainerScalars(
+  dataset=ParticleInteraction,
+  ndata=ntrain+2000,
+  epoch_samples=4096,
+  bs=512,
+  trainer_config=trainer_config,
+  progress_bar=True
+)
+```
+#### Figures to visualize comparison results for the above examples
 
 <img src="https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/b6a77f3cf21a951e06729bd45a83b5b957695e32/docs/notebooks/imgs/data_efficiency_O5Synthetic.png?raw=true" height="250"/> <img src="https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/b6a77f3cf21a951e06729bd45a83b5b957695e32/docs/notebooks/imgs/data_efficiency_Inertia.png?raw=true" height="250"/>
 
