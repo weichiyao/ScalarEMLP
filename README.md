@@ -135,7 +135,7 @@ test_mse = makeTrainerScalars(
 ```
 #### Figures to visualize comparison results for the above examples
 
-<img src="https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/b6a77f3cf21a951e06729bd45a83b5b957695e32/docs/notebooks/imgs/data_efficiency_O5Synthetic.png?raw=true" height="250"/> <img src="https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/b6a77f3cf21a951e06729bd45a83b5b957695e32/docs/notebooks/imgs/data_efficiency_Inertia.png?raw=true" height="250"/>
+<img src="https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/b6a77f3cf21a951e06729bd45a83b5b957695e32/docs/notebooks/imgs/data_efficiency_O5Synthetic.png?raw=true" height="210"/> <img src="https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/b6a77f3cf21a951e06729bd45a83b5b957695e32/docs/notebooks/imgs/data_efficiency_Inertia.png?raw=true" height="210"/> <img src="https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/9d53d15cbf0545538fe495f6f9f7bc00dddeded4/docs/notebooks/imgs/data_efficiency_ParticleInteraction.png" height="210"/>
 
 The purple line labeled as "scalars" corresponds to our method.
 
