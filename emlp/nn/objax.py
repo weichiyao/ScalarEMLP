@@ -363,18 +363,17 @@ def comp_inner_products(x, take_sqrt=True):
     """
    
     n = x.shape[0]
-    scalars = np.einsum('bix,bjx->bij', x, x).reshape(n, -1) # (n, 16)
+    scalars = np.einsum('bix,bjx->bij', x, x).reshape(n, -1) # (n,16)
     if take_sqrt:
-        xxsqrt = np.sqrt(np.einsum('bix,bix->bi', x, x)) # (n, 4)
-        scalars = np.concatenate([xxsqrt, scalars], axis = -1)  # (n, 20)
+        xxsqrt = np.sqrt(np.einsum('bix,bix->bi', x, x)) # (n,4)
+        scalars = np.concatenate([xxsqrt, scalars], axis = -1)  # (n,20)
     return scalars 
 
 @export
 def compute_scalars(x):
     """Input x of dim [n, 12]"""
     x = np.array(x)
-    x = x.reshape(-1,4,3)         
-    n = x.shape[0]
+    x = x.reshape(-1,4,3)       
     xx = comp_inner_products(x)  # (n,20)
     g  = np.array([0,0,-1])
     xg = np.inner(g, x) # (n,4)
@@ -447,11 +446,12 @@ class EquivarianceLayer_objax(Module):
     def __call__(self,x,t):
         x = x.reshape(-1,4,3) # (n,4,3)
         scalars = jnp.array(compute_scalars(x)) # (n,26)
-        scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n, 26, n_rad)
-        scalars = jnp.exp( -self.gamma * scalars**2) #(n, 26, n_rad)
-        scalars = scalars.reshape(-1, self.n_in_mlp) #(n, 26*n_rad)
-        out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n, 24, 1)
+        scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,26,n_rad)
+        scalars = jnp.exp( -self.gamma * scalars**2) #(n,26,n_rad)
+        scalars = scalars.reshape(-1, self.n_in_mlp) #(n,26*n_rad)
+        out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
         
+        y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
         x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * g #(n,3)
         x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * g #(n,3)
         p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,19,:] * y + out[:,23,:] * g #(n,3)
