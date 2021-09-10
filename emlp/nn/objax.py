@@ -384,6 +384,36 @@ def compute_scalars(x):
     scalars = np.concatenate([xx,xg,yy], axis=-1) # (n,26)
     return scalars
 
+def comp_inner_products_jax(x, take_sqrt=True):
+    """
+    INPUT: batch (q1, q2, p1, p2)
+    N: number of datasets
+    dim: dimension  
+    x: numpy tensor of size [N, 4, dim] 
+    """
+   
+    n = x.shape[0]
+    scalars = jnp.einsum('bix,bjx->bij', x, x).reshape(n, -1) # (n, 16)
+    if take_sqrt:
+        xxsqrt = jnp.sqrt(jnp.einsum('bix,bix->bi', x, x)) # (n, 4)
+        scalars = jnp.concatenate([xxsqrt, scalars], axis = -1)  # (n, 20)
+    return scalars 
+
+def compute_scalars_jax(x):
+    """Input x of dim [n, 12]"""
+    x = x.reshape(-1,4,3)         
+    xx = comp_inner_products_jax(x)  # (n,20)
+    g  = jnp.array([0,0,-1])
+    xg = jnp.inner(g, x) # (n,4)
+    y  = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
+    yy = jnp.sum(y*y, axis = -1, keepdims=True) # <x1-x2, x1-x2> | (n,) 
+
+    yy = jnp.concatenate([yy, jnp.sqrt(yy)], axis = -1) # (n,2)
+    scalars = jnp.concatenate([xx,xg,yy], axis=-1) # (n,26)
+    return scalars
+
+
+
 @export
 class BasicMLP_objax(Module):
     def __init__(
@@ -445,7 +475,7 @@ class EquivarianceLayer_objax(Module):
        
     def __call__(self,x,t):
         x = x.reshape(-1,4,3) # (n,4,3)
-        scalars = jnp.array(compute_scalars(x)) # (n,26)
+        scalars = compute_scalars_jax(x) # (n,26)
         scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,26,n_rad)
         scalars = jnp.exp( -self.gamma * scalars**2) #(n,26,n_rad)
         scalars = scalars.reshape(-1, self.n_in_mlp) #(n,26*n_rad)
