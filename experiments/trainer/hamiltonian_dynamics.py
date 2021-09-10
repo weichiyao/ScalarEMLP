@@ -511,7 +511,7 @@ class hnnScalars_trial(object):
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"./{cfg['network']}.t")
+            torch.save(np.concatenate(trajectories),f"cfg['trainer_config']['log_dir']/{cfg['network']}.t")
         except Exception as e:
             if self.strict: raise
             outcome = e
