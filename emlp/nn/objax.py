@@ -449,7 +449,7 @@ class InvarianceLayer_objax(objax.Module):
        
     def __call__(self,x):
         x = x.reshape(-1,4,3) 
-        scalars = jnp.array(compute_scalars(x))
+        scalars = compute_scalars_jax(x)
         out = self.mlp(scalars)
 
         return out.sum()
