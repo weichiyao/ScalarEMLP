@@ -173,7 +173,7 @@ class DoubleSpringPendulum(HamiltonianDataset):
         self.symmetry = O2eR3()
         self.stats = (0,1,0,1)
     def H(self,z):
-        g=1
+        g = jnp.array([0,0,-1])
         m1,m2,k1,k2,l1,l2 = 1,1,1,1,1,1
         x,p = unpack(z)
         p1,p2 = unpack(p)
@@ -181,8 +181,8 @@ class DoubleSpringPendulum(HamiltonianDataset):
         ke = .5*(p1**2).sum(-1)/m1 + .5*(p2**2).sum(-1)/m2
         pe = .5*k1*(jnp.sqrt((x1**2).sum(-1))-l1)**2 
         pe += k2*(jnp.sqrt(((x1-x2)**2).sum(-1))-l2)**2
-        pe += m1*g*x1[...,2]+m2*g*x2[...,2]
-        return (ke + pe).sum()
+        pe += -(g*x1).sum(-1)*m1+(g*x2).sum(-1)*m2
+        return ke + pe
     def sample_initial_conditions(self,bs):
         x1 = np.array([0,0,-1.5]) +.2*np.random.randn(bs,3)
         x2= np.array([0,0,-3.]) +.2*np.random.randn(bs,3)
