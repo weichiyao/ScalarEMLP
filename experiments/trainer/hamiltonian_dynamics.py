@@ -483,7 +483,7 @@ class ode_trial(object):
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt_ode(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_{i}.t")
+            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNN'}_{i}.t")
         except Exception as e:
             if self.strict: raise
             outcome = e
@@ -498,11 +498,14 @@ class hnnScalars_trial(object):
     def __init__(self,make_trainer,strict=True):
         self.make_trainer = make_trainer
         self.strict=strict
-    def __call__(self,cfg):
+    def __call__(self,cfg,i=None):
         try:
             cfg.pop('local_rank',None) #TODO: properly handle distributed
             resume = cfg.pop('resume',False)
             save = cfg.pop('save',False)
+            if i is not None:
+                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
+                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
             trainer = self.make_trainer(**cfg)
             trainer.logger.add_scalars('config',flatten_dict(cfg))
             trainer.train(cfg['num_epochs'])
@@ -511,7 +514,7 @@ class hnnScalars_trial(object):
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_nODE'}_{i}.t")
+            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_NODE'}_{i}.t")
         except Exception as e:
             if self.strict: raise
             outcome = e
