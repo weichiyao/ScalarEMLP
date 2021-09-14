@@ -520,7 +520,7 @@ class odeScalars_trial(object):
         return cfg, outcome
     
     
-    @export
+@export
 class hnnScalars_trial(object):
     """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
         Feel free to use your own."""
