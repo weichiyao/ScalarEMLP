@@ -354,6 +354,7 @@ def radial_basis_transform(x, nrad = 100):
     mu    = np.linspace(start=xmin, stop=xmax, num=nrad)
     return mu, gamma
 
+
 def comp_inner_products(x, take_sqrt=True):
     """
     INPUT: batch (q1, q2, p1, p2)
@@ -371,9 +372,8 @@ def comp_inner_products(x, take_sqrt=True):
 
 @export
 def compute_scalars(x):
-    """Input x of dim [n, 12]"""
-    x = np.array(x)
-    x = x.reshape(-1,4,3)       
+    """Input x of dim [n, 4, 3]"""
+    x = np.array(x)    
     xx = comp_inner_products(x)  # (n,20)
     g  = np.array([0,0,-1])
     xg = np.inner(g, x) # (n,4)
@@ -383,6 +383,7 @@ def compute_scalars(x):
     yy = np.concatenate([yy, np.sqrt(yy)], axis = -1) # (n,2)
     scalars = np.concatenate([xx,xg,yy], axis=-1) # (n,26)
     return scalars
+
 
 def comp_inner_products_jax(x, take_sqrt=True):
     """
@@ -400,8 +401,7 @@ def comp_inner_products_jax(x, take_sqrt=True):
     return scalars 
 
 def compute_scalars_jax(x):
-    """Input x of dim [n, 12]"""
-    x = x.reshape(-1,4,3)         
+    """Input x of dim [n, 4, 3]"""       
     xx = comp_inner_products_jax(x)  # (n,20)
     g  = jnp.array([0,0,-1])
     xg = jnp.inner(g, x) # (n,4)
@@ -436,7 +436,7 @@ class BasicMLP_objax(Module):
         return self.mlp(x)
 
 @export
-class InvarianceLayer_objax(objax.Module):
+class InvarianceLayer_objax(Module):
     def __init__(
         self, 
         n_hidden, 
@@ -448,8 +448,7 @@ class InvarianceLayer_objax(objax.Module):
         ) 
        
     def __call__(self,x):
-        x = x.reshape(-1,4,3) 
-        scalars = compute_scalars_jax(x)
+        scalars = compute_scalars_jax(x.reshape(-1,4,3))
         out = self.mlp(scalars)
 
         return out.sum()
@@ -477,7 +476,7 @@ class EquivarianceLayer_objax(Module):
         x = x.reshape(-1,4,3) # (n,4,3)
         scalars = compute_scalars_jax(x) # (n,26)
         scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,26,n_rad)
-        scalars = jnp.exp( -self.gamma * scalars**2) #(n,26,n_rad)
+        scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,26,n_rad)
         scalars = scalars.reshape(-1, self.n_in_mlp) #(n,26*n_rad)
         out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
         
@@ -491,4 +490,3 @@ class EquivarianceLayer_objax(Module):
         
         return jnp.concatenate([x1,x2,p1,p2], axis=-1) #(n,12)
          
-
