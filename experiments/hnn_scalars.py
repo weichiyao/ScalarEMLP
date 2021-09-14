@@ -19,9 +19,9 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
           'info': logging.INFO,'debug': logging.DEBUG}
 
 
-def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPH,num_epochs=2500,ndata=5000,seed=2021, 
-                bs=500,lr=2e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
-                net_config={'n_layers':3,'n_hidden':200}, log_level='info',
+def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPH,num_epochs=1500,ndata=5000,seed=2021, 
+                bs=500,lr=5e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
+                net_config={'n_layers':3,'n_hidden':100}, log_level='info',
                 trainer_config={'log_dir':'/home/','log_args':{'minPeriod':.02,'timeFrac':.75},},
                 #'early_stop_metric':'val_MSE'},
                 save=True,):
@@ -36,7 +36,8 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPH,num_epochs=2
                 num_workers=0,pin_memory=False)) for k,v in datasets.items()}
     dataloaders['Train'] = dataloaders['train']
     opt_constr = objax.optimizer.Adam
-    lr_sched = lambda e: lr#*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
+    # lr_sched = lambda e: lr#*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
+    lr_sched = lambda e: lr if (e < 200) else (lr*0.4 if e < 1000 else (lr*0.1))   
     return IntegratedDynamicsTrainer(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":
