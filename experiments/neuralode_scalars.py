@@ -18,7 +18,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
 
 def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPode,num_epochs=2000,ndata=5000,seed=2021,aug=False,
                 n_rad=200,bs=500,lr=3e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
-                net_config={'n_layers':3,'n_hidden':100},log_level='warn',
+                net_config={'n_layers':3,'n_hidden':200},log_level='warn',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},}, 
                 save=True,):
 
@@ -29,9 +29,8 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPode,num_epochs
         datasets = split_dataset(base_ds,splits=split)
     
     z0_train = base_ds.Zs[datasets['train']._ids,0,:]
-    scalars_z0 = compute_scalars(z0_train)
+    scalars_z0 = compute_scalars(z0_train.reshape(-1,4,3))
     trans_mu, trans_gamma = radial_basis_transform(scalars_z0, nrad = n_rad) 
-
     model = EquivarianceLayer_objax(
         n_layers=net_config['n_layers'], 
         n_hidden=net_config['n_hidden'],
@@ -40,7 +39,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPode,num_epochs
     )
     
     dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
-                num_workers=0,pin_memory=False)) for k,v in datasets.items()}
+                   num_workers=0,pin_memory=False)) for k,v in datasets.items()}
     dataloaders['Train'] = dataloaders['train']
      
     opt_constr = objax.optimizer.Adam
