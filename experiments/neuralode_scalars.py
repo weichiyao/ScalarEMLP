@@ -44,7 +44,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPode,num_epochs
      
     opt_constr = objax.optimizer.Adam
     # lr_sched = lambda e: lr#*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
-    lr_sched = lambda e: lr if e < 300 else (lr*0.5 if e < 1000 else lr*0.2)
+    lr_sched = lambda e: lr if e < 300 else (lr*0.5 if e < 1200 else lr*0.2)
     return IntegratedODETrainer(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":
