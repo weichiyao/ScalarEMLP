@@ -173,7 +173,7 @@ class DoubleSpringPendulum(HamiltonianDataset):
         self.symmetry = O2eR3()
         self.stats = (0,1,0,1)
     def H(self,z):
-        g = jnp.array([0,0,-1])
+        g=1
         m1,m2,k1,k2,l1,l2 = 1,1,1,1,1,1
         x,p = unpack(z)
         p1,p2 = unpack(p)
@@ -181,8 +181,8 @@ class DoubleSpringPendulum(HamiltonianDataset):
         ke = .5*(p1**2).sum(-1)/m1 + .5*(p2**2).sum(-1)/m2
         pe = .5*k1*(jnp.sqrt((x1**2).sum(-1))-l1)**2 
         pe += k2*(jnp.sqrt(((x1-x2)**2).sum(-1))-l2)**2
-        pe += -(g*x1).sum(-1)*m1-(g*x2).sum(-1)*m2
-        return ke + pe
+        pe += m1*g*x1[...,2]+m2*g*x2[...,2]
+        return (ke + pe).sum()
     def sample_initial_conditions(self,bs):
         x1 = np.array([0,0,-1.5]) +.2*np.random.randn(bs,3)
         x2= np.array([0,0,-3.]) +.2*np.random.randn(bs,3)
@@ -216,7 +216,6 @@ class IntegratedDynamicsTrainer(Regressor):
     def logStuff(self, step, minibatch=None):
         loader = self.dataloaders['test']
         metrics = {'test_Rollout': np.exp(self.evalAverageMetrics(loader,partial(log_rollout_error,loader.dataset,self.model)))}
-        print(step, metrics)
         self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)
 
@@ -478,20 +477,50 @@ class ode_trial(object):
             trainer = self.make_trainer(**cfg)
             trainer.logger.add_scalars('config',flatten_dict(cfg))
             trainer.train(cfg['num_epochs'])
-            # if save: cfg['saved_at']=trainer.save_checkpoint()
+            if save: cfg['saved_at']=trainer.save_checkpoint()
             outcome = trainer.ckpt['outcome']
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt_ode(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"./{cfg['network']}_{cfg['net_config']['group']}_{i}.t")
+            torch.save(np.concatenate(trajectories),f"./{cfg['network']}_{cfg['net_config']['group']}_{i}.t") 
         except Exception as e:
             if self.strict: raise
             outcome = e
         del trainer
         return cfg, outcome
-
-
+    
 @export
+class odeScalars_trial(object):
+    """ A training trial for the Neural ODEs, contains lots of boiler plate which is not necessary.
+        Feel free to use your own."""
+    def __init__(self,make_trainer,strict=True):
+        self.make_trainer = make_trainer
+        self.strict=strict
+    def __call__(self,cfg,i=None):
+        try:
+            cfg.pop('local_rank',None) #TODO: properly handle distributed
+            resume = cfg.pop('resume',False)
+            save = cfg.pop('save',False)
+            if i is not None:
+                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
+                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
+            trainer = self.make_trainer(**cfg)
+            trainer.logger.add_scalars('config',flatten_dict(cfg))
+            trainer.train(cfg['num_epochs'])
+            if save: cfg['saved_at']=trainer.save_checkpoint()
+            outcome = trainer.ckpt['outcome']
+            trajectories = []
+            for mb in trainer.dataloaders['test']:
+                trajectories.append(pred_and_gt_ode(trainer.dataloaders['test'].dataset,trainer.model,mb)) 
+            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_NODEs'}_{i}.t")
+        except Exception as e:
+            if self.strict: raise
+            outcome = e
+        del trainer
+        return cfg, outcome
+    
+    
+    @export
 class hnnScalars_trial(object):
     """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
         Feel free to use your own."""
@@ -509,45 +538,12 @@ class hnnScalars_trial(object):
             trainer = self.make_trainer(**cfg)
             trainer.logger.add_scalars('config',flatten_dict(cfg))
             trainer.train(cfg['num_epochs'])
-            # if save: cfg['saved_at']=trainer.save_checkpoint()
+            if save: cfg['saved_at']=trainer.save_checkpoint()
             outcome = trainer.ckpt['outcome']
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNN'}_{i}.t")
-        except Exception as e:
-            if self.strict: raise
-            outcome = e
-        del trainer
-        return cfg, outcome
-    
-    
-    
-@export
-class odeScalars_trial(object):
-    """ A training trial for the Neural ODEs, contains lots of boiler plate which is not necessary.
-        Feel free to use your own."""
-    def __init__(self,make_trainer,strict=True):
-        self.make_trainer = make_trainer
-        self.strict=strict
-    def __call__(self,cfg,i=None):
-        try:
-            cfg.pop('local_rank',None)  
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            if i is not None:
-                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
-            trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
-            trainer.train(cfg['num_epochs'])
-            # if save: cfg['saved_at']=trainer.save_checkpoint()
-            outcome = trainer.ckpt['outcome']
-            trajectories = []
-            for mb in trainer.dataloaders['test']:
-                trajectories.append(pred_and_gt_ode(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            print(cfg)
-            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_NODE'}_{i}.t")
+            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_{i}.t")
         except Exception as e:
             if self.strict: raise
             outcome = e
