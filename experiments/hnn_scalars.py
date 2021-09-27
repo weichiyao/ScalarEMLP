@@ -19,7 +19,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
           'info': logging.INFO,'debug': logging.DEBUG}
 
 
-def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPH,num_epochs=1500,ndata=5000,seed=2021, 
+def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPH,num_epochs=2000,ndata=5000,seed=2021, 
                 bs=500,lr=5e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
                 net_config={'n_layers':3,'n_hidden':100}, log_level='info',
                 trainer_config={'log_dir':'/home/','log_args':{'minPeriod':.02,'timeFrac':.75},},
