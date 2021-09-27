@@ -1,4 +1,4 @@
-# Scalars are universal: Gauge-equivariant machine learning, structured like classical physics
+# Scalar-based multi-layer perceptron models
 
 ## Authors:
 **This project is currently anonymous as per Neurips 2021 requiments.** Some contributor names appear to the right to this github page because we imported their codes from their public github repository [equivariant-MLP](https://github.com/mfinzi/equivariant-MLP.git). 
