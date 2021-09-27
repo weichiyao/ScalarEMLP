@@ -23,8 +23,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPH,num_epochs=2
                 bs=500,lr=5e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
                 net_config={'n_layers':3,'n_hidden':100}, log_level='info',
                 trainer_config={'log_dir':'/home/','log_args':{'minPeriod':.02,'timeFrac':.75},},
-                #'early_stop_metric':'val_MSE'},
-                save=True,):
+                save=False,):
     logging.getLogger().setLevel(levels[log_level])
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
