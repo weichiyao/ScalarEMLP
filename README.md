@@ -11,7 +11,7 @@ This repository provides codes to construct invariant and equivariant neural net
 To compare the simulation results with those using *EMLP* proposed in [A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups](https://arxiv.org/abs/2104.09459), this repository imported codes from [equivariant-MLP](https://github.com/mfinzi/equivariant-MLP.git). 
 
 
-## Experimental Results
+## Experimental Results from Paper
 To run the scripts you will need to clone the repo and install it locally which you can do with
 ```
 !git clone https://github.com/Pamplemousse-Elaina/Comparison_EMLP.git
