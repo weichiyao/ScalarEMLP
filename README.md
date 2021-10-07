@@ -152,8 +152,4 @@ python experiments/neuralode_scalars.py
 ```
 to train (equivariant) Scalar-Based MLP Hamiltonian Neural Networks and Neural-ODEs.  
 
-#### Figures to visualize scalar-based results for the springy dynamic system
-
-
-
 
