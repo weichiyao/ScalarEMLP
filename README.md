@@ -154,4 +154,8 @@ python experiments/neuralode_scalars.py
 ```
 to train (equivariant) Scalar-Based MLP Hamiltonian Neural Networks and Neural-ODEs.  
 
+#### Figures to visualize scalar-based results for the springy dynamic system
+<img src=https://github.com/weichiyao/ScalarEMLP/blob/9bad3323e50b652f07ce314150f3f4f423ebefe8/docs/notebooks/imgs/phase_springy_dynamic_system.png height="400" width="600"/>
+
+The above figure shows the ground truth and predictions of mass 1 (top) and 2 (bottom) in the phase space w.r.t. each dimension. HNNs exhibits more accurate predictions for longer time scales.
 
