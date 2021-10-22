@@ -1,7 +1,9 @@
 # Scalar-based multi-layer perceptron models
 
 ## Authors:
-**This project is currently anonymous as per Neurips 2021 requiments.** Some contributor names appear to the right to this github page because we imported their codes from their public github repository [equivariant-MLP](https://github.com/mfinzi/equivariant-MLP.git). 
+*ScalarEMLP* contains the codes to implement the idea of enforcing the equivariance in deep learning using the scalar method based on the NeurIPS paper (to appear) [**Scalars are universal: Equivariant machine learning, structured like classical physics**](https://arxiv.org/abs/2106.06610); in particular, for learning the system dynamics, for example, in a double pendulum with springs, see paper [**A simple equivariant machine learning method for dynamics based on scalars**](https://arxiv.org/abs/2110.03761).
+
+Some contributor names appear to the right to this github page because we imported their codes from their public github repository [equivariant-MLP](https://github.com/mfinzi/equivariant-MLP.git). 
 
 ## Introduction
 Scalar products and scalar contractions of the scalar, vector, and tensor inputs are powerful. Deep learning models using these scalars respect the gauge symmetries—or coordinate freedom—of physical law.
