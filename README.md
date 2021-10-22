@@ -144,11 +144,11 @@ The purple line labeled as "scalars" corresponds to our method.
 ### Modeling dynamical systems with symmetries
 We consider the task of learning the dynamics of a double pendulum with springs in 3-dimensional space, analogous to the numerical experiment from [Finzi et al. ICML 2021](https://arxiv.org/abs/2104.09459). The approach consists of learning the Hamiltonian that characterizes the dynamical system. Finzi at al. consider O(2) or SO(2) equivariance, because the behavior in the z-direction is not the same as the behavior in the xy-plane due to gravity. Our model considers the gravity vector to be an input of the hamiltonian and models the Hamiltonian as an O(3)-invariant function: ![formula](https://render.githubusercontent.com/render/math?math=H(q_1,q_2,p_1,p_2,g,k_1,k_2,L_1,L2,m_1,m_2)) an invariant function of vectors indicating the positions of the masses, the momentums, the gravity vector, and the scalars corresponding to the constant of the springs, the natural lengths, and the masses.
      
-For the dynamical systems modeling experiments you can use the scripts [`experiments/hnn_scalars.py`](https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/master/experiments/hnn_scalars.py) 
+For the dynamical systems modeling experiments you can use the scripts [`experiments/hnn_scalars.py`](experiments/hnn_scalars.py) 
 ```
 python experiments/hnn_scalars.py
 ```
-and [`experiments/neuralode_scalars.py`](https://github.com/Pamplemousse-Elaina/Comparison_EMLP/blob/master/experiments/neuralode_scalars.py) 
+and [`experiments/neuralode_scalars.py`](experiments/neuralode_scalars.py) 
 ```
 python experiments/neuralode_scalars.py
 ```
