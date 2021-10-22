@@ -1,6 +1,3 @@
-from emlp.nn import MLP,EMLP,MLPH,EMLPH,InvarianceLayer_objax
-from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
-from emlp.reps import Scalar
 from trainer.hamiltonian_dynamics import IntegratedDynamicsTrainer,DoubleSpringPendulum,hnnScalars_trial
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr,FixedNumpySeed,FixedPytorchSeed
@@ -19,7 +16,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
           'info': logging.INFO,'debug': logging.DEBUG}
 
 
-def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPH,num_epochs=2000,ndata=5000,seed=2021, 
+def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021, 
                 bs=500,lr=5e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
                 net_config={'n_layers':3,'n_hidden':100}, log_level='info',
                 trainer_config={'log_dir':'/home/','log_args':{'minPeriod':.02,'timeFrac':.75},},
@@ -41,6 +38,6 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,network=EMLPH,num_epochs=2
 
 if __name__ == "__main__":
     Trial = hnnScalars_trial(makeTrainerScalars)
-    cfg,outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__,namespace=(emlp.groups,emlp.nn)))
+    cfg,outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__))
     print(outcome)
 
