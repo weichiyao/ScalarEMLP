@@ -209,8 +209,8 @@ class DoubleSpringPendulum(HamiltonianDataset):
         ke = .5*(p1**2).sum(-1)/m1 + .5*(p2**2).sum(-1)/m2
         pe = .5*k1*(jnp.sqrt((x1**2).sum(-1))-l1)**2 
         pe += k2*(jnp.sqrt(((x1-x2)**2).sum(-1))-l2)**2
-        # pe += m1*g * x1+m2*g * x1 
-        pe += -m1*jnp.sum(g * x1, axis = -1) - m2*jnp.sum(g * x1, axis = -1)
+        # pe += m1*g*x1[...,2]+m2*g*x2[...,2]
+        pe += -m1*jnp.sum(g*x1, axis=-1) - m2*jnp.sum(g*x2, axis=-1)
         return (ke + pe).sum() 
     def sample_parameters(self,bs):
         # g = np.random.uniform(-1, 1, size=(bs, 3))    # WEICHI: g should be a 3-d vector 
