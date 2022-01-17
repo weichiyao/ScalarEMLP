@@ -1,28 +1,24 @@
-import jax.numpy as jnp
-from jax import grad, jit, vmap, jacfwd, jvp, vjp
-from jax import random
-import numpy as np
-import jax.numpy as jnp
+import jax 
+from jax import grad, jit, vmap, jacfwd, jvp, vjp, random
 from jax.experimental.ode import odeint
-from torch.utils.data import Dataset
-from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
-from emlp.reps import T,Scalar
+import jax.numpy as jnp
+import objax
 from oil.utils.utils import Named
 from oil.tuning.configGenerator import flatten_dict
-import os
-import torch
-import torch
-import torch.nn as nn
 from oil.utils.utils import export
-import jax
-from jax import vmap
-import jax.numpy as jnp
-import numpy as np
-import objax
-from .classifier import Regressor,Classifier
-#from emlp_jax.model_trainer import RegressorPlus
+ 
+import os
+import torch 
+import torch.nn as nn
+from torch.utils.data import Dataset
+import numpy as np 
 from functools import partial
 from itertools import islice
+
+from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
+from emlp.reps import T,Scalar
+from .classifier import Regressor,Classifier
+#from emlp_jax.model_trainer import RegressorPlus
 
 ## Code to rollout a Hamiltonian system
 
@@ -41,32 +37,41 @@ def symplectic_form(z):
     q, p = unpack(z)
     return pack(p, -q)
 
-def hamiltonian_dynamics(hamiltonian, z,t):
-    """ Takes a Hamiltonian function, a state vector z, and an unused time t
-        to compute the hamiltonian dynamics J∇H"""
-    grad_h = grad(hamiltonian) # ∇H
-    gh = grad_h(z) # ∇H(z)
+def hamiltonian_dynamics(hamiltonian, z,t,zp):
+    """ 
+    Takes 
+    - a Hamiltonian function, 
+    - a state vector z, 
+    - an unused time t,
+    - parameters zp including g, m1, k1, l2, m2, k2, l2
+    to compute the hamiltonian dynamics J∇H
+    """
+    # Differentiate `hamiltonian` with respect to the first positional argument
+    # by default, argnums = 0 
+    grad_h = grad(hamiltonian) # ∇H 
+    gh = grad_h(z, zp) # ∇H(z)
     return symplectic_form(gh) # J∇H(z)
 
-def HamiltonianFlow(H,z0,T):
-    """ Converts a Hamiltonian H and initial conditions z0
-         to rolled out trajectory at time points T.
-         z0 shape (state_dim,) and T shape (t,) yields (t,state_dim) rollout."""
-    dynamics = lambda z,t: hamiltonian_dynamics(H,z,t)
-    return odeint(dynamics, z0, T, rtol=1e-4, atol=1e-4)#.transpose((1,0,2))
+def HamiltonianFlow(H,z0,T,zp):
+    """ Converts a Hamiltonian H and initial conditions z0,
+        as well as other parameters zp (g, m1, k1, l2, m2, k2, l2)
+        to rolled out trajectory at time points T.
+        z0 shape (state_dim,) and T shape (t,) yields (t,state_dim) rollout."""
+    dynamics = lambda z,t,zp: hamiltonian_dynamics(H,z,t,zp)
+    return odeint(dynamics, z0, T, zp, rtol=1e-4, atol=1e-4)#.transpose((1,0,2))
 
-def BHamiltonianFlow(H,z0,T,tol=1e-4):
+def BHamiltonianFlow(H,z0,T,zp,tol=1e-4):
     """ Batched version of HamiltonianFlow, essentially equivalent to vmap(HamiltonianFlow),
         z0 of shape (bs,state_dim) and T of shape (t,) yields (bs,t,state_dim) rollouts """
-    dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None)))
-    return odeint(dynamics, z0, T, rtol=tol).transpose((1,0,2))
+    dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None,0)))
+    return odeint(dynamics, z0, T, zp, rtol=tol).transpose((1,0,2))
 
-def BOdeFlow(dynamics,z0,T,tol=1e-4):
+def BOdeFlow(dynamics,z0,T,zp,tol=1e-4):
     """ Batched integration of ODE dynamics into rollout trajectories.
         Given dynamics (state_dim->state_dim) and z0 of shape (bs,state_dim)
         and T of shape (t,) outputs trajectories (bs,t,state_dim) """
-    dynamics = jit(vmap(jit(dynamics),(0,None)))
-    return odeint(dynamics, z0, T, rtol=tol).transpose((1,0,2))
+    dynamics = jit(vmap(jit(dynamics),(0,None,0)))
+    return odeint(dynamics, z0, T, zp, rtol=tol).transpose((1,0,2))
 
 class HamiltonianDataset(Dataset):
     """ A dataset that generates trajectory chunks from integrating the Hamiltonian dynamics
@@ -91,14 +96,15 @@ class HamiltonianDataset(Dataset):
         filename = os.path.join(root_dir, f"trajectories_{n_systems}_{chunk_len}_{dt}_{integration_time}.pz")
 
         if os.path.exists(filename) and not regen:
-            Zs = torch.load(filename)
+            Zs, ZPs = torch.load(filename)
         else:
-            zs = self.generate_trajectory_data(n_systems, dt, integration_time)
+            zs, ZPs = self.generate_trajectory_data(n_systems, dt, integration_time)
             Zs = np.asarray(self.chunk_training_data(zs, chunk_len))
             os.makedirs(root_dir, exist_ok=True)
-            torch.save(Zs, filename)
+            torch.save((Zs, ZPs), filename)
         
         self.Zs = Zs
+        self.ZPs = ZPs
         self.T = np.asarray(jnp.arange(0, chunk_len*dt, dt))
         self.T_long = np.asarray(jnp.arange(0,integration_time,dt))
 
@@ -106,23 +112,34 @@ class HamiltonianDataset(Dataset):
         return self.Zs.shape[0]
 
     def __getitem__(self, i):
-        return (self.Zs[i, 0], self.T), self.Zs[i]
+        return (self.Zs[i, 0], self.ZPs[i], self.T), self.Zs[i]
 
-    def integrate(self,z0s,ts):
-        return HamiltonianFlow(self.H,z0s, ts)
+    def integrate(self,z0s,zps,ts):
+        return HamiltonianFlow(self.H_wrap(zps), z0s, ts) # HamiltonianFlow(self.H, z0s, ts)
     
     def generate_trajectory_data(self, n_systems, dt, integration_time, bs=100):
-        """ Returns ts: (n_systems, traj_len) zs: (n_systems, traj_len, z_dim) """
+        """ 
+        Returns ts: (n_systems, traj_len) zs: (n_systems, traj_len, z_dim)
+                zps: (n_systems, 9) = (g, (m1,k1,l1), (m2,k2,l2))
+        """
         n_gen = 0; bs = min(bs, n_systems)
         t_batches, z_batches = [], []
-        while n_gen < n_systems:
-            z0s = self.sample_initial_conditions(bs)
-            ts = jnp.arange(0, integration_time, dt)
-            new_zs = BHamiltonianFlow(self.H,z0s, ts)
+        ## generate parameters
+        zps = self.sample_parameters(n_systems)
+        while n_gen < n_systems: 
+            ## generate positions and velocities 
+            z0s = self.sample_initial_conditions(bs) 
+            ts = jnp.arange(0, integration_time, dt) 
+            new_zs = BHamiltonianFlow(
+                self.H, 
+                z0s, 
+                ts,
+                zps[n_gen:n_gen+bs]
+            ) # new_zs = BHamiltonianFlow(self.H,z0s,ts)
             z_batches.append(new_zs)
             n_gen += bs
         zs = jnp.concatenate(z_batches, axis=0)[:n_systems]
-        return zs
+        return zs, zps
 
     def chunk_training_data(self, zs, chunk_len):
         batch_size, traj_len, *z_dim = zs.shape
@@ -132,20 +149,26 @@ class HamiltonianDataset(Dataset):
         chosen_zs = chunked_zs[chunk_idx, np.arange(batch_size)]
         return chosen_zs
 
-    def H(self,z):
-        """ The Hamiltonian function, depending on z=pack(q,p)"""
-        raise NotImplementedError
+    def H(self,z,zp):
+        """ The Hamiltonian function, depending on z=pack(q,p), zp=(g,m1,k1,g1,m2,k2,g2)"""
+        raise NotImplementedError 
 
     def sample_initial_conditions(self,bs):
         """ Initial condition distribution """
         raise NotImplementedError
 
-    def animate(self, zt=None):
+    def sample_parameters(self,bs):
+        """ Parameters """
+        raise NotImplementedError
+
+    def animate(self, zt=None, zpt=None):
         """ Visualize the dynamical system, or given input trajectories.
             Usage:  from IPython.display import HTML
                     HTML(dataset.animate())"""
         if zt is None:
-            zt = np.asarray(self.integrate(self.sample_initial_conditions(10)[0],self.T_long))
+            zpt = self.sample_parameters(10)
+            zt = np.asarray(self.integrate(self.sample_initial_conditions(10)[0],zpt,self.T_long))
+        
         # bs, T, 2nd
         if len(zt.shape) == 3:
             j = np.random.randint(zt.shape[0])
@@ -157,12 +180,15 @@ class HamiltonianDataset(Dataset):
 
 class SHO(HamiltonianDataset):
     """ A basic simple harmonic oscillator"""
-    def H(self,z):
+    def H(self,z,c):
         ke = (z[...,1]**2).sum()/2
         pe = (z[...,0]**2).sum()/2
-        return ke+pe
+        return ke+pe 
     def sample_initial_conditions(self,bs):
         return np.random.randn(bs,2)
+    def sample_parameters(self, bs):
+        return  
+    
     
 class DoubleSpringPendulum(HamiltonianDataset):
     """ The double spring pendulum dataset described in the paper."""
@@ -172,23 +198,39 @@ class DoubleSpringPendulum(HamiltonianDataset):
         self.rep_out = T(0)#Scalar
         self.symmetry = O2eR3()
         self.stats = (0,1,0,1)
-    def H(self,z):
-        g=1
-        m1,m2,k1,k2,l1,l2 = 1,1,1,1,1,1
+
+    def H(self,z,zp):
+        g = zp[...,:3]
+        m1,k1,l1 = zp[...,3], zp[...,4], zp[...,5]
+        m2,k2,l2 = zp[...,6], zp[...,7], zp[...,8]
         x,p = unpack(z)
         p1,p2 = unpack(p)
         x1,x2 = unpack(x)
         ke = .5*(p1**2).sum(-1)/m1 + .5*(p2**2).sum(-1)/m2
         pe = .5*k1*(jnp.sqrt((x1**2).sum(-1))-l1)**2 
         pe += k2*(jnp.sqrt(((x1-x2)**2).sum(-1))-l2)**2
-        pe += m1*g*x1[...,2]+m2*g*x2[...,2]
-        return (ke + pe).sum()
+        # pe += m1*g * x1+m2*g * x1 
+        pe += -m1*jnp.sum(g * x1, axis = -1) - m2*jnp.sum(g * x1, axis = -1)
+        return (ke + pe).sum() 
+    def sample_parameters(self,bs):
+        # g = np.random.uniform(-1, 1, size=(bs, 3))    # WEICHI: g should be a 3-d vector 
+        # g = g/np.linalg.norm(g,axis=-1,keepdims=True) # WEICHI: normalize, maybe not need to
+        g = np.tile([0,0,-1],bs).reshape(bs,-1)
+        m1 = np.ones((bs,)) # np.random.uniform(0,1,(bs,))
+        m2 = np.ones((bs,)) # np.random.uniform(0,1,(bs,))
+        k1 = np.ones((bs,)) # np.random.uniform(0,1,(bs,)) 
+        k2 = np.ones((bs,)) # np.random.uniform(0,1,(bs,)) 
+        l1 = np.ones((bs,)) # np.random.uniform(0,1,(bs,)) 
+        l2 = np.ones((bs,)) # np.random.uniform(0,1,(bs,))
+        mkl = np.stack([m1, k1, l1, m2, k2, l2], axis=-1) # (bs, 6)  
+        return np.concatenate([g, mkl], axis=-1) # (bs, 9)
     def sample_initial_conditions(self,bs):
         x1 = np.array([0,0,-1.5]) +.2*np.random.randn(bs,3)
-        x2= np.array([0,0,-3.]) +.2*np.random.randn(bs,3)
+        x2 = np.array([0,0,-3.]) +.2*np.random.randn(bs,3)
         p = .4*np.random.randn(bs,6)
-        z0 = np.concatenate([x1,x2,p],axis=-1)
-        return z0
+        z0 = np.concatenate([x1,x2,p],axis=-1) # (bs, 12) 
+        return z0 
+    
     @property
     def animator(self):
         return CoupledPendulumAnimation
@@ -202,11 +244,12 @@ class IntegratedDynamicsTrainer(Regressor):
         super().__init__(model,*args,**kwargs)
         self.loss = objax.Jit(self.loss,model.vars())
         self.gradvals = objax.Jit(objax.GradValues(self.loss,model.vars()))
-
+    
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
-        (z0, ts), true_zs = minibatch
-        pred_zs = BHamiltonianFlow(self.model,z0,ts[0])
+        (z0, zps, ts), true_zs = minibatch
+        # pred_zs = BHamiltonianFlow(self.model,z0,ts[0])
+        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],zps)
         return jnp.mean((pred_zs - true_zs)**2)
 
     def metrics(self, loader):
@@ -223,15 +266,16 @@ class IntegratedODETrainer(Regressor):
     """ A trainer for training the Neural ODEs. Feel free to use your own instead."""
     def __init__(self,model,*args,**kwargs):
         super().__init__(model,*args,**kwargs)
-        self.loss = objax.Jit(self.loss,model.vars())
+        self.loss = objax.Jit(self.loss, model.vars())
         #self.model = objax.Jit(self.model)
-        self.gradvals = objax.Jit(objax.GradValues(self.loss,model.vars()))#objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
+        self.gradvals = objax.Jit(objax.GradValues(self.loss, model.vars()))#objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
         #self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
 
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
-        (z0, ts), true_zs = minibatch
-        pred_zs = BOdeFlow(self.model,z0,ts[0])
+        (z0, zps, ts), true_zs = minibatch
+        # pred_zs = BOdeFlow(self.model,z0,ts[0])
+        pred_zs = BOdeFlow(self.model,z0,ts[0],zps)
         return jnp.mean((pred_zs - true_zs)**2)
 
     def metrics(self, loader):
@@ -253,18 +297,22 @@ def log_rollout_error(ds,model,minibatch):
     """ Computes the log of the geometric mean of the rollout
         error computed between the dataset ds and HNN model
         on the initial condition in the minibatch."""
-    (z0, _), _ = minibatch
-    pred_zs = BHamiltonianFlow(model,z0,ds.T_long)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
+    (z0, zps, _), _ = minibatch
+    # pred_zs = BHamiltonianFlow(model,z0,ds.T_long)
+    pred_zs = BHamiltonianFlow(model,z0,ds.T_long,zps)
+    # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps)
     errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
     clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
     log_geo_mean = jnp.log(clamped_errs).mean()
     return log_geo_mean
 
 def pred_and_gt(ds,model,minibatch):
-    (z0, _), _ = minibatch
-    pred_zs = BHamiltonianFlow(model,z0,ds.T_long,tol=2e-6)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
+    (z0, zps, _), _ = minibatch
+    # pred_zs = BHamiltonianFlow(model,z0,ds.T_long,tol=2e-6)
+    pred_zs = BHamiltonianFlow(model,z0,ds.T_long,zps,tol=2e-6)
+    # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
 
 
@@ -272,18 +320,22 @@ def log_rollout_error_ode(ds,model,minibatch):
     """ Computes the log of the geometric mean of the rollout
         error computed between the dataset ds and NeuralODE model
         on the initial condition in the minibatch."""
-    (z0, _), _ = minibatch
-    pred_zs = BOdeFlow(model,z0,ds.T_long)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
+    (z0, zps, _), _ = minibatch
+    # pred_zs = BOdeFlow(model,z0,ds.T_long)
+    pred_zs = BOdeFlow(model,z0,ds.T_long,zps)
+    # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps)
     errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
     clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
     log_geo_mean = jnp.log(clamped_errs).mean()
     return log_geo_mean
 
 def pred_and_gt_ode(ds,model,minibatch):
-    (z0, _), _ = minibatch
-    pred_zs = BOdeFlow(model,z0,ds.T_long,tol=2e-6)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
+    (z0, zps, _), _ = minibatch
+    # pred_zs = BOdeFlow(model,z0,ds.T_long,tol=2e-6)
+    pred_zs = BOdeFlow(model,z0,ds.T_long,zps,tol=2e-6)
+    # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
 
 
