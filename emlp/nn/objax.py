@@ -439,14 +439,14 @@ class InvarianceLayer_objax(Module):
         y  = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
         yy = jnp.sum(y*y, axis = -1, keepdims=True) # <x1-x2, x1-x2> | (n,1)   
         scalars = jnp.concatenate(
-            [xx, xg, yy, jnp.sqrt(yy), mkl.reshape(-1,6)], 
+            [xx, xg, yy, jnp.sqrt(yy), mkl], 
             axis=-1
         ) # (n,32)
         return scalars  
 
     def __call__(self, x, xp):
-        g, mkl = xp[...,:3], xp[...,3:] # (n,6), (n,6)  
-        scalars = self.compute_scalars_jax(x.reshape(-1,4,3), g, mkl)
+        g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
+        scalars = self.compute_scalars_jax(x.reshape(-1,4,3), g.reshape(-1,3), mkl.reshape(-1,6))
         out = self.mlp(scalars)
         return out.sum()  
 
@@ -474,16 +474,16 @@ class EquivarianceLayer_objax(Module):
         y  = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
         yy = jnp.sum(y*y, axis = -1, keepdims=True) # <x1-x2, x1-x2> | (n,1)   
         scalars = jnp.concatenate(
-            [xx, xg, yy, jnp.sqrt(yy), mkl.reshape(-1,6)], 
+            [xx, xg, yy, jnp.sqrt(yy), mkl], 
             axis=-1
         ) # (n,32)
         return scalars  
 
     def __call__(self, x, xp):
-        g, mkl = xp[...,:3], xp[...,3:] # (n,6), (n,6)  
+        g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
          
         x = x.reshape(-1,4,3) # (n,4,3)
-        scalars = self.compute_scalars_jax(x, g, mkl) # (n,32)
+        scalars = self.compute_scalars_jax(x, g.reshape(-1,3), mkl.reshape(-1,6)) # (n,32)
         scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,32,n_rad)
         scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,32,n_rad)
         scalars = scalars.reshape(-1, self.n_in_mlp) #(n,32*n_rad)
