@@ -479,7 +479,7 @@ class EquivarianceLayer_objax(Module):
         ) # (n,32)
         return scalars  
 
-    def __call__(self, x, xp):
+    def __call__(self, x, t, xp):
         g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
          
         x = x.reshape(-1,4,3) # (n,4,3)
