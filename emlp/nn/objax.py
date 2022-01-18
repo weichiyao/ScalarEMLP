@@ -425,11 +425,20 @@ class InvarianceLayer_objax(Module):
     def __init__(
         self,  
         n_hidden, 
-        n_layers
+        n_layers,
+        mu=None,
+        gamma=None
     ):
         super().__init__()
+        self.mu = mu # (n_rad,)
+        self.gamma = gamma 
+        
+        self.n_in_mlp = 32
+        if mu is not None:
+            self.n_in_mlp *= len(mu) 
+            
         self.mlp = BasicMLP_objax(
-          n_in=32, n_out=1, n_hidden=n_hidden, n_layers=n_layers
+          n_in=self.n_in_mlp, n_out=1, n_hidden=n_hidden, n_layers=n_layers
         )  
 
     def compute_scalars_jax(self, x, g, mkl):
@@ -445,8 +454,14 @@ class InvarianceLayer_objax(Module):
         return scalars  
 
     def __call__(self, x, xp):
+        x = x.reshape(-1,4,3) 
         g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
-        scalars = self.compute_scalars_jax(x.reshape(-1,4,3), g.reshape(-1,3), mkl.reshape(-1,6))
+        
+        scalars = self.compute_scalars_jax(x, g.reshape(-1,3), mkl.reshape(-1,6))
+        if self.mu is not None:
+            scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,32,n_rad)
+            scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,32,n_rad)
+            scalars = scalars.reshape(-1, self.n_in_mlp) #(n,32*n_rad)
         out = self.mlp(scalars)
         return out.sum()  
 
