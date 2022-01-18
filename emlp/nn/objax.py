@@ -452,8 +452,8 @@ class InvarianceLayer_objax(Module):
             axis=-1
         ) # (n,32)
         return scalars  
-
-    def __call__(self, x, xp):
+    
+    def H(self,x, xp): 
         x = x.reshape(-1,4,3) 
         g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
         
@@ -464,6 +464,9 @@ class InvarianceLayer_objax(Module):
             scalars = scalars.reshape(-1, self.n_in_mlp) #(n,32*n_rad)
         out = self.mlp(scalars)
         return out.sum()  
+    
+    def __call__(self, x, xp):
+        return self.H(x, xp)
 
 @export
 class EquivarianceLayer_objax(Module):
