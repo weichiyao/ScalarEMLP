@@ -44,7 +44,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
     )
           
     dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
-                num_workers=0,pin_memory=False)) for k,v in datasets.items()}
+                   num_workers=0,pin_memory=False)) for k,v in datasets.items()}
     dataloaders['Train'] = dataloaders['train']
     
     opt_constr = objax.optimizer.Adam
