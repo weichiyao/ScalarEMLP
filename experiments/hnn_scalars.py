@@ -18,14 +18,15 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
 
 
 def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021, 
-                n_rad=200,bs=500,lr=5e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
-                net_config={'n_layers':3,'n_hidden':100}, log_level='info',
-                trainer_config={'log_dir':'/home/','log_args':{'minPeriod':.02,'timeFrac':.75},},
-                save=False,):
+                       n_rad=200,bs=500,lr=5e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
+                       data_config={'chunk_len':5,'dt':0.2,'integration_time':30,'regen':False},
+                       net_config={'n_layers':3,'n_hidden':100}, log_level='info',
+                       trainer_config={'log_dir':'/home/','log_args':{'minPeriod':.02,'timeFrac':.75},},
+                       save=False,):
     logging.getLogger().setLevel(levels[log_level])
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
-        base_ds = dataset(n_systems=ndata,chunk_len=5)
+        base_ds = dataset(n_systems=ndata,**data_config)
         datasets = split_dataset(base_ds,splits=split)
           
     dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
