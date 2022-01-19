@@ -1,4 +1,4 @@
-from emlp.nn import InvarianceLayer_objax,compute_scalars,radial_basis_transform
+from emlp.nn import InvarianceLayer_objax,InvarianceLayerDL_objax,compute_scalars,radial_basis_transform
 from trainer.hamiltonian_dynamics import IntegratedDynamicsTrainer,DoubleSpringPendulum,hnnScalars_trial
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr,FixedNumpySeed,FixedPytorchSeed
@@ -18,6 +18,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
 
 
 def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021, 
+                       dimensionless=False,
                        n_rad=200,bs=500,lr=5e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
                        data_config={'chunk_len':5,'dt':0.2,'integration_time':30,'regen':False},
                        net_config={'n_layers':3,'n_hidden':100}, log_level='info',
@@ -28,8 +29,11 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
         base_ds = dataset(n_systems=ndata,**data_config)
         datasets = split_dataset(base_ds,splits=split)
-        
-    model = InvarianceLayer_objax(**net_config)
+    
+    if dimensionless:
+        model = InvarianceLayerDL_objax(**net_config)      
+    else:
+        model = InvarianceLayer_objax(**net_config)
           
     dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
                    num_workers=0,pin_memory=False)) for k,v in datasets.items()}
@@ -42,6 +46,6 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
 
 if __name__ == "__main__":
     Trial = hnnScalars_trial(makeTrainerScalars)
-    cfg,outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__,namespace=(emlp.groups,emlp.nn)))
+    cfg,outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__,namespace=(emlp.groups,emlp.nn)),i=1)
     print(outcome)
 
