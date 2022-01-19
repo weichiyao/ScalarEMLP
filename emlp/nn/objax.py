@@ -20,7 +20,7 @@ from objax.nn.init import orthogonal
 from scipy.special import binom
 from jax import jit,vmap
 from functools import lru_cache as cache
-
+import itertools
 from smithnormalform import snfproblem
 from smithnormalform import matrix as snfmatrix
 from smithnormalform import z as snfz
@@ -375,18 +375,37 @@ def comp_inner_products(x, take_sqrt=True):
     return scalars 
 
 @export
-def compute_scalars(zs, zps):
-    """Input zs of dim [n, 4, 3], zps of dim [n, 9] = (g, (m1,k1,l1), (m2,k2,l2))"""
-    g = zps[...,:3] # (n,6)
-    mkl = zps[...,3:] # (n,6)
+def compute_scalars(x, xp):
+    """Input x of dim [n, 4, 3], xp of dim [n, 9] = (g, m1, m2, k1, k2, l1, l2)"""
+    x = np.array(x)
+    xp = np.array(xp)
     
-    zs = np.array(zs)    
-    zs_prod = comp_inner_products(zs)  # (n,20) 
-    xg = np.einsum('...j, ...ij', g, zs)  # (n,4)
-    zs_diff  = zs[:,0,:] - zs[:,1,:] # x1-x2 (n,3)
-    zs_diff = np.sum(zs_diff*zs_diff, axis=-1, keepdims=True) # <x1-x2, x1-x2> | (n,1) 
-    scalars = np.concatenate([zs_prod, xg, zs_diff, np.sqrt(zs_diff), mkl], axis=-1) # (n,32)
-    return scalars # (n,32)
+    idx = np.array(
+        list(itertools.combinations_with_replacement(np.arange(0,4), r=2))
+    )
+    idx_map = np.array([2,3,0,1])
+    idx = idx_map[idx] 
+    idx_sqrt = np.concatenate(
+        [np.zeros(1,dtype=int), np.cumsum(np.arange(2,5)[::-1])], 
+        axis=0
+    ) 
+    
+    g = xp[...,:3] # (n,6)
+    mkl = xp[...,3:] # (n,6) 
+    
+    x[:,1,:] = x[:,1,:]-x[:,0,:]  
+    xx = np.sum(
+        x[:,idx[:,0],:]*x[:,idx[:,1],:], 
+        axis=-1
+    ) # (n,10)
+    ## take square root of p_1^\top p_1, p_2^\top p_2, q_1^\top q_1, (q_2-q_1)^\top (q_2-q_1)
+    xs = np.sqrt(xx[:,idx_sqrt]) # (n,4)
+    gx = np.einsum("...j,...ij", g, x[:,idx_map]) # (n,4)
+    gg = np.sum(g*g, axis=-1, keepdims=True) #(n,1)
+        
+    ## all the current scalars we have 
+    scalars = np.concatenate([mkl, gg, np.sqrt(gg), gx, xx, xs], axis=-1) # (n, 26)
+    return scalars  
 
 
 def comp_inner_products_jax(x, take_sqrt=True):
@@ -432,11 +451,7 @@ class InvarianceLayer_objax(Module):
         n_layers
     ):
         super().__init__()
-        self.mu = mu # (n_rad,)
-        self.gamma = gamma 
-        
         self.n_in_mlp = 26
-            
         self.mlp = BasicMLP_objax(
           n_in=self.n_in_mlp, n_out=1, n_hidden=n_hidden, n_layers=n_layers
         )  
@@ -468,15 +483,11 @@ class InvarianceLayer_objax(Module):
         scalars = jnp.concatenate([mkl, gg, jnp.sqrt(gg), gx, xx, xs], axis = -1) # (n, 26)
         return scalars  
     
-    def H(self,x, xp): 
+    def H(self, x, xp): 
         x = x.reshape(-1,4,3) 
         g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
         
         scalars = self.compute_scalars_jax(x, g.reshape(-1,3), mkl.reshape(-1,6))
-        if self.mu is not None:
-            scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,32,n_rad)
-            scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,32,n_rad)
-            scalars = scalars.reshape(-1, self.n_in_mlp) #(n,32*n_rad)
         out = self.mlp(scalars)
         return out.sum()  
     
