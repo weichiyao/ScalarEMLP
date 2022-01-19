@@ -371,18 +371,16 @@ def comp_inner_products(x, take_sqrt=True):
     return scalars 
 
 @export
-def compute_scalars(zs, zps):
-    """Input zs of dim [n, 4, 3], zps of dim [n, 9] = (g, (m1,k1,l1), (m2,k2,l2))"""
-    g = zps[...,:3] # (n,6)
-    mkl = zps[...,3:] # (n,6)
-    
+def compute_scalars(zs):
+    """Input zs of dim [n, 4, 3]"""
     zs = np.array(zs)    
     zs_prod = comp_inner_products(zs)  # (n,20) 
-    xg = np.einsum('...j, ...ij', g, zs)  # (n,4)
+    g = np.array([0,0,-1])
+    zg = np.inner(g, zs) # (n,4)
     zs_diff  = zs[:,0,:] - zs[:,1,:] # x1-x2 (n,3)
     zs_diff = np.sum(zs_diff*zs_diff, axis=-1, keepdims=True) # <x1-x2, x1-x2> | (n,1) 
-    scalars = np.concatenate([zs_prod, xg, zs_diff, np.sqrt(zs_diff), mkl], axis=-1) # (n,32)
-    return scalars # (n,32)
+    scalars = np.concatenate([zs_prod, zg, zs_diff, np.sqrt(zs_diff)], axis=-1) # (n,26)
+    return scalars # (n,26)
 
 
 def comp_inner_products_jax(x, take_sqrt=True):
@@ -425,48 +423,33 @@ class InvarianceLayer_objax(Module):
     def __init__(
         self,  
         n_hidden, 
-        n_layers,
-        mu=None,
-        gamma=None
+        n_layers, 
     ):
         super().__init__()
-        self.mu = mu # (n_rad,)
-        self.gamma = gamma 
-        
-        self.n_in_mlp = 32
-        if mu is not None:
-            self.n_in_mlp *= len(mu) 
-            
         self.mlp = BasicMLP_objax(
-          n_in=self.n_in_mlp, n_out=1, n_hidden=n_hidden, n_layers=n_layers
-        )  
+            n_in=26, n_out=1, n_hidden=n_hidden, n_layers=n_layers
+        ) 
+        self.g = jnp.array([0,0,-1])
 
-    def compute_scalars_jax(self, x, g, mkl):
+    def compute_scalars_jax(self, x):
         """Input x of dim [n, 4, 3]"""       
         xx = comp_inner_products_jax(x)  # (n,20) 
-        xg = jnp.einsum('...j,...ij', g, x)  # (n,4)
+        xg = jnp.inner(self.g, x) # (n,4)
         y  = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
         yy = jnp.sum(y*y, axis = -1, keepdims=True) # <x1-x2, x1-x2> | (n,1)   
         scalars = jnp.concatenate(
-            [xx, xg, yy, jnp.sqrt(yy), mkl], 
+            [xx, xg, yy, jnp.sqrt(yy)], 
             axis=-1
-        ) # (n,32)
+        ) # (n,26)
         return scalars  
     
-    def H(self,x, xp): 
-        x = x.reshape(-1,4,3) 
-        g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
-        
-        scalars = self.compute_scalars_jax(x, g.reshape(-1,3), mkl.reshape(-1,6))
-        if self.mu is not None:
-            scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,32,n_rad)
-            scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,32,n_rad)
-            scalars = scalars.reshape(-1, self.n_in_mlp) #(n,32*n_rad)
+    def H(self, x):  
+        scalars = self.compute_scalars_jax(x)
         out = self.mlp(scalars)
         return out.sum()  
     
-    def __call__(self, x, xp):
-        return self.H(x, xp)
+    def __call__(self, x):
+        return self.H(x)
 
 @export
 class EquivarianceLayer_objax(Module):
@@ -480,38 +463,37 @@ class EquivarianceLayer_objax(Module):
         super().__init__()  
         self.mu = mu # (n_rad,)
         self.gamma = gamma
-        self.n_in_mlp = len(mu)*32
+        self.n_in_mlp = len(mu)*26
         self.mlp = BasicMLP_objax(
           n_in=self.n_in_mlp, n_out=24, n_hidden=n_hidden, n_layers=n_layers
         ) 
+        self.g = jnp.array([0,0,-1])
 
-    def compute_scalars_jax(self, x, g, mkl):
+    def compute_scalars_jax(self, x):
         """Input x of dim [n, 4, 3]"""       
-        xx = comp_inner_products_jax(x)  # (n,20) 
-        xg = jnp.einsum('...j,...ij', g, x)  # (n,4)
+        xx = comp_inner_products_jax(x)  # (n,20)  
+        xg = jnp.inner(self.g, x) # (n,4)
         y  = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
         yy = jnp.sum(y*y, axis = -1, keepdims=True) # <x1-x2, x1-x2> | (n,1)   
         scalars = jnp.concatenate(
-            [xx, xg, yy, jnp.sqrt(yy), mkl], 
+            [xx, xg, yy, jnp.sqrt(yy)], 
             axis=-1
-        ) # (n,32)
+        ) # (n,26)
         return scalars  
 
-    def __call__(self, x, t, xp):
-        g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
-         
+    def __call__(self, x, t): 
         x = x.reshape(-1,4,3) # (n,4,3)
-        scalars = self.compute_scalars_jax(x, g.reshape(-1,3), mkl.reshape(-1,6)) # (n,32)
-        scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,32,n_rad)
-        scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,32,n_rad)
-        scalars = scalars.reshape(-1, self.n_in_mlp) #(n,32*n_rad)
+        scalars = self.compute_scalars_jax(x) # (n,32)
+        scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,26,n_rad)
+        scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,26,n_rad)
+        scalars = scalars.reshape(-1, self.n_in_mlp) #(n,26*n_rad)
         out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
-        
+         
         y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
-        x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * g #(n,3)
-        x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * g #(n,3)
-        p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,19,:] * y + out[:,23,:] * g #(n,3)
-        p2 = jnp.sum(out[:,12:16,:]*x, axis = 1) + out[:,20,:] * y + out[:,24,:] * g #(n,3)
+        x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * self.g #(n,3)
+        x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * self.g #(n,3)
+        p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,19,:] * y + out[:,23,:] * self.g #(n,3)
+        p2 = jnp.sum(out[:,12:16,:]*x, axis = 1) + out[:,20,:] * y + out[:,24,:] * self.g #(n,3)
         
         return jnp.concatenate([x1,x2,p1,p2], axis=-1) #(n,12)
  
