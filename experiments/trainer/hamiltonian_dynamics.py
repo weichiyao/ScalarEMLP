@@ -201,29 +201,31 @@ class DoubleSpringPendulum(HamiltonianDataset):
 
     def H(self,z,zp):
         g = zp[...,:3]
-        m1,k1,l1 = zp[...,3], zp[...,4], zp[...,5]
-        m2,k2,l2 = zp[...,6], zp[...,7], zp[...,8]
+        m1,m2 = zp[...,3], zp[...,4]
+        k1,k2 = zp[...,5], zp[...,6]
+        l1,l2 = zp[...,7], zp[...,8] 
+        
         x,p = unpack(z)
         p1,p2 = unpack(p)
         x1,x2 = unpack(x)
         ke = .5*(p1**2).sum(-1)/m1 + .5*(p2**2).sum(-1)/m2
         pe = .5*k1*(jnp.sqrt((x1**2).sum(-1))-l1)**2 
         pe += k2*(jnp.sqrt(((x1-x2)**2).sum(-1))-l2)**2
-        # pe += m1*g*x1[...,2]+m2*g*x2[...,2]
         pe += -m1*jnp.sum(g*x1, axis=-1) - m2*jnp.sum(g*x2, axis=-1)
         return (ke + pe).sum() 
+       
     def sample_parameters(self,bs):
-        # g = np.random.uniform(-1, 1, size=(bs, 3))    # WEICHI: g should be a 3-d vector 
-        # g = g/np.linalg.norm(g,axis=-1,keepdims=True) # WEICHI: normalize, maybe not need to
-        g = np.tile([0,0,-1],bs).reshape(bs,-1)
-        m1 = np.ones((bs,)) # np.random.uniform(0,1,(bs,))
-        m2 = np.ones((bs,)) # np.random.uniform(0,1,(bs,))
-        k1 = np.ones((bs,)) # np.random.uniform(0,1,(bs,)) 
-        k2 = np.ones((bs,)) # np.random.uniform(0,1,(bs,)) 
-        l1 = np.ones((bs,)) # np.random.uniform(0,1,(bs,)) 
-        l2 = np.ones((bs,)) # np.random.uniform(0,1,(bs,))
-        mkl = np.stack([m1, k1, l1, m2, k2, l2], axis=-1) # (bs, 6)  
+        g = np.random.uniform(-1, 1, size=(bs, 3))    
+        g = g/np.linalg.norm(g,axis=-1,keepdims=True) # normalize 
+        m1 = np.random.uniform(1,2,(bs,))
+        m2 = np.random.uniform(1,2,(bs,))
+        k1 = np.random.uniform(1,2,(bs,))
+        k2 = np.random.uniform(1,2,(bs,))
+        l1 = np.random.uniform(1,2,(bs,))
+        l2 = np.random.uniform(1,2,(bs,))
+        mkl = np.stack([m1, m2, k1, k2, l1, l2], axis=-1) # (bs, 6)  
         return np.concatenate([g, mkl], axis=-1) # (bs, 9)
+       
     def sample_initial_conditions(self,bs):
         x1 = np.array([0,0,-1.5]) +.2*np.random.randn(bs,3)
         x2 = np.array([0,0,-3.]) +.2*np.random.randn(bs,3)
