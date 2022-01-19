@@ -18,6 +18,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
 
 def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021,aug=False,
                 n_rad=200,bs=500,lr=5e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
+                data_config={'chunk_len':5,'dt':0.2,'integration_time':30,'regen':False},
                 net_config={'n_layers':3,'n_hidden':100},log_level='warn',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},}, 
                 save=True,):
@@ -25,7 +26,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
     logging.getLogger().setLevel(levels[log_level])
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
-        base_ds = dataset(n_systems=ndata,chunk_len=5)
+        base_ds = dataset(n_systems=ndata,**data_config)
         datasets = split_dataset(base_ds,splits=split)
     
     z0_train = base_ds.Zs[datasets['train']._ids,0,:]
