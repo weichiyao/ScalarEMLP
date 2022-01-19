@@ -21,6 +21,10 @@ from scipy.special import binom
 from jax import jit,vmap
 from functools import lru_cache as cache
 
+from smithnormalform import snfproblem
+from smithnormalform import matrix as snfmatrix
+from smithnormalform import z as snfz
+
 def Sequential(*args):
     """ Wrapped to mimic pytorch syntax"""
     return nn.Sequential(args)
