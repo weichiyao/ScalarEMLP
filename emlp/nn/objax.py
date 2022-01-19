@@ -425,32 +425,43 @@ class InvarianceLayer_objax(Module):
     def __init__(
         self,  
         n_hidden, 
-        n_layers,
-        mu=None,
-        gamma=None
+        n_layers
     ):
         super().__init__()
         self.mu = mu # (n_rad,)
         self.gamma = gamma 
         
-        self.n_in_mlp = 32
-        if mu is not None:
-            self.n_in_mlp *= len(mu) 
+        self.n_in_mlp = 26
             
         self.mlp = BasicMLP_objax(
           n_in=self.n_in_mlp, n_out=1, n_hidden=n_hidden, n_layers=n_layers
         )  
+        
+        idx = jnp.array(
+            list(itertools.combinations_with_replacement(jnp.arange(0,4), r=2))
+        )
+        self.idx_map = jnp.array([2,3,0,1])
+        self.idx = self.idx_map[idx] 
+        self.idx_sqrt = jnp.concatenate(
+            [jnp.zeros(1,dtype=int), jnp.cumsum(jnp.arange(2,5)[::-1])], 
+            axis=0
+        ) 
 
     def compute_scalars_jax(self, x, g, mkl):
-        """Input x of dim [n, 4, 3]"""       
-        xx = comp_inner_products_jax(x)  # (n,20) 
-        xg = jnp.einsum('...j,...ij', g, x)  # (n,4)
-        y  = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
-        yy = jnp.sum(y*y, axis = -1, keepdims=True) # <x1-x2, x1-x2> | (n,1)   
-        scalars = jnp.concatenate(
-            [xx, xg, yy, jnp.sqrt(yy), mkl], 
+        """Input x: (n, 4, 3), g: (n, 3), mkl: (n, 6)""" 
+        # get q2 - q1 replacing q2
+        x = x.at[:,1,:].set(x[:,1,:]-x[:,0,:])  
+        xx = jnp.sum(
+            x[:,self.idx[:,0],:]*x[:,self.idx[:,1],:], 
             axis=-1
-        ) # (n,32)
+        ) # (n,10)
+        ## take square root of p_1^\top p_1, p_2^\top p_2, q_1^\top q_1, (q_2-q_1)^\top (q_2-q_1)
+        xs = jnp.sqrt(xx[:,self.idx_sqrt]) # (n,4)
+        gx = jnp.einsum("...j,...ij", g, x[:,self.idx_map]) # (n,4)
+        gg = jnp.sum(g*g, axis = -1, keepdims=True) #(n,1)
+        
+        ## all the current scalars we have 
+        scalars = jnp.concatenate([mkl, gg, jnp.sqrt(gg), gx, xx, xs], axis = -1) # (n, 26)
         return scalars  
     
     def H(self,x, xp): 
@@ -480,31 +491,46 @@ class EquivarianceLayer_objax(Module):
         super().__init__()  
         self.mu = mu # (n_rad,)
         self.gamma = gamma
-        self.n_in_mlp = len(mu)*32
+        self.n_in_mlp = len(mu)*26
         self.mlp = BasicMLP_objax(
           n_in=self.n_in_mlp, n_out=24, n_hidden=n_hidden, n_layers=n_layers
         ) 
 
+        idx = jnp.array(
+            list(itertools.combinations_with_replacement(jnp.arange(0,4), r=2))
+        )
+        self.idx_map = jnp.array([2,3,0,1])
+        self.idx = self.idx_map[idx] 
+        self.idx_sqrt = jnp.concatenate(
+            [jnp.zeros(1,dtype=int), jnp.cumsum(jnp.arange(2,5)[::-1])], 
+            axis=0
+        ) 
+        
     def compute_scalars_jax(self, x, g, mkl):
         """Input x of dim [n, 4, 3]"""       
-        xx = comp_inner_products_jax(x)  # (n,20) 
-        xg = jnp.einsum('...j,...ij', g, x)  # (n,4)
-        y  = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
-        yy = jnp.sum(y*y, axis = -1, keepdims=True) # <x1-x2, x1-x2> | (n,1)   
-        scalars = jnp.concatenate(
-            [xx, xg, yy, jnp.sqrt(yy), mkl], 
+        # get q2 - q1 replacing q2
+        x = x.at[:,1,:].set(x[:,1,:]-x[:,0,:])  
+        xx = jnp.sum(
+            x[:,self.idx[:,0],:]*x[:,self.idx[:,1],:], 
             axis=-1
-        ) # (n,32)
+        ) # (n,10)
+        ## take square root of p_1^\top p_1, p_2^\top p_2, q_1^\top q_1, (q_2-q_1)^\top (q_2-q_1)
+        xs = jnp.sqrt(xx[:,self.idx_sqrt]) # (n,4)
+        gx = jnp.einsum("...j,...ij", g, x[:,self.idx_map]) # (n,4)
+        gg = jnp.sum(g*g, axis = -1, keepdims=True) #(n,1)
+        
+        ## all the current scalars we have 
+        scalars = jnp.concatenate([mkl, gg, jnp.sqrt(gg), gx, xx, xs], axis = -1) # (n, 26)
         return scalars  
 
     def __call__(self, x, t, xp):
         g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
          
         x = x.reshape(-1,4,3) # (n,4,3)
-        scalars = self.compute_scalars_jax(x, g.reshape(-1,3), mkl.reshape(-1,6)) # (n,32)
-        scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,32,n_rad)
-        scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,32,n_rad)
-        scalars = scalars.reshape(-1, self.n_in_mlp) #(n,32*n_rad)
+        scalars = self.compute_scalars_jax(x, g.reshape(-1,3), mkl.reshape(-1,6)) # (n,26)
+        scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,26,n_rad)
+        scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,26,n_rad)
+        scalars = scalars.reshape(-1, self.n_in_mlp) #(n,26*n_rad)
         out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
         
         y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
@@ -515,5 +541,198 @@ class EquivarianceLayer_objax(Module):
         
         return jnp.concatenate([x1,x2,p1,p2], axis=-1) #(n,12)
  
+class Dimensionless(object):
+    def __init__(self):
+        self.create_mapping()
+        self.h = jnp.array(self.h)
+        self.nh = jnp.array(self.nh)
 
+    def make_base(self):
+        """
+        Make powers of the base dimensions 
+        """
+        names = np.array(
+            ["m_1", "m_2", "k_1", "k_2", "l_1", "l_2", 
+             "g", "p_1", "p_2", "q_1", "(q_2-q_1)"]
+        )
+        a_xs = np.array([[1, 0,  0], # kg
+                         [1, 0,  0], # kg
+                         [1, 0, -2], # N / m = kg / s^2
+                         [1, 0, -2], # N / m = kg / s^2
+                         [0, 1,  0], # m
+                         [0, 1,  0], # m
+                         [0, 1, -2], # m / s^2
+                         [1, 1, -1], # kg m / s
+                         [1, 1, -1], # kg m / s
+                         [0, 1,  0], # m
+                         [0, 1,  0]] # m
+                        ).astype(int)
+        scalars = np.array([0, 1, 2, 3, 4, 5]).astype(int)
+        vectors = np.array([6, 7, 8, 9, 10]).astype(int)
+        a_y = np.array([1, 2, -2]).astype(int) # J = kg m^2 / s^2 
+        return a_xs, a_y, names, scalars, vectors
+
+    def make_flat_features(self, a_xs, x_names, scalars, vectors):
+        """
+        reformat the blobby features into flat, scalar features:
+        hack; totally non-pythonic
+        """
+        J, S_f = a_xs.shape
+        foo = len(vectors)
+        J_f = len(scalars) + foo * (foo + 1) // 2
+        names_f = np.zeros(J_f).astype(str)
+        a_xs_f = np.zeros((J_f, S_f)).astype(int)
+        j_f = 0
+        powers_f = np.zeros(J_f).astype(int)
+        for i,j in enumerate(scalars):
+            names_f[i] = x_names[j]
+            a_xs_f[i] = a_xs[j]
+            powers_f[i] = 1
+        i += 1
+        for ii,j1 in enumerate(vectors):
+            names_f[i] = "|" + names[j1] + "|"
+            a_xs_f[i] = a_xs[j1]
+            powers_f[i] = 1
+            i += 1
+            for j2 in vectors[ii+1:]:
+                names_f[i] = "(" + names[j1] + "^\\top " + names[j2] + ")"
+                a_xs_f[i] = a_xs[j1] + a_xs[j2] # because we are multiplying
+                powers_f[i] = 2
+                i+= 1
+        return a_xs_f, names_f, powers_f
+    
+    def hogg_msv_integer_solve(self, A, b):
+        """
+        Find all solutions to Ax=b where A, x, b are integer.
+
+        ## inputs:
+        - A - [n, m] integer matrix - n < m, please
+        - b - [n] integer vector
+
+        ## outputs:
+        - vv - [m] integer vector solution to the problem Ax=b
+        - us - [k, m] set of k integer vector solutions to the problem Ax=0
+
+        ## bugs / issues:
+        - Might get weird when k <= 1.
+        - Might get weird if k > m - n.
+        - Depends EXTREMELY strongly on everything being integer.
+        - Uses smithnormalform package, which is poorly documented.
+        - Requires smithnormalform package to have been imported as follows:
+            !pip install smithnormalform
+            from smithnormalform import snfproblem
+            from smithnormalform import matrix as snfmatrix
+            from smithnormalform import z as snfz
+        """
+        ## perform the horrifying packing into SNF Matrix format; HACK
+        n, m = A.shape
+        assert(m >= n)  
+        assert(len(b) == n)
+        assert A.dtype is np.dtype(int)
+        assert b.dtype is np.dtype(int)
+        smat = snfmatrix.Matrix(n, m, [snfz.Z(int(a)) for a in A.flatten()])
+        ## calculate the Smith Normal Form 
+        prob = snfproblem.SNFProblem(smat)
+        prob.computeSNF()
+        ## perform the horrifying unpacking from SNF Matrix form; HACK
+        SS = np.array([a.a for a in prob.S.elements]).reshape(n, n)
+        TT = np.array([a.a for a in prob.T.elements]).reshape(m, m)
+        JJ = np.array([a.a for a in prob.J.elements]).reshape(n, m)
+        ## Find a basis for the lattice of null vectors
+        us = None
+        zeros = np.sum(JJ ** 2, axis=0) == 0
+        us = (TT[:, zeros]).T
+        DD = SS @ b
+        v = np.zeros(m)
+        v[:n] = DD / np.diag(JJ)
+        vv = (TT @ v).astype(int) 
+        return vv, us
+
+    def create_mapping(self): 
+        """
+        nh: final scaling (2, 21)
+        h: dimentionless matrix (18,21)
+        """
+        a_xs, a_y, names, scalars, vectors = self.make_base()
+        a_xs_flat, names_flat, _ = self.make_flat_features(a_xs, names, scalars, vectors)
+        _, self.h = self.hogg_msv_integer_solve(a_xs_flat.T, a_y) 
+        _, m = self.h.shape
+        self.nh = np.zeros((2,m))
+        # manually make the scaling  
+        self.nh[0][names_flat=="m_1"], self.nh[0][names_flat=="|p_1|"] = -1, 2
+        self.nh[1][names_flat=="m_2"], self.nh[1][names_flat=="|p_2|"] = -1, 2
+
+    def __call__(self, x):
+        """
+        Input 
+        - x: scalars with dimensions (n, 21)
+        Output
+        - x_dl: dimensionless scalars (n, 18)
+        - x_s: scaling (n,1)  
+        """
+        ## Broadcasting: (n, 21) & (18, 21) => (n, 18, 21) => (n, 18)
+        x_dl = jnp.prod(jnp.expand_dims(x, axis = 1) ** self.h, axis=-1) 
+        x_sc = jnp.prod(jnp.expand_dims(x, axis = 1) ** self.nh, axis=-1)
+        x_sc = jnp.sum(x_sc, axis = -1, keepdims=True) 
+        return x_dl, x_sc 
      
+@export
+class InvarianceLayerDL_objax(Module):
+    def __init__(
+        self,   
+        n_hidden, 
+        n_layers, 
+    ):
+        super().__init__() 
+        self.n_in_mlp = 36
+        self.mlp = BasicMLP_objax(
+          n_in=self.n_in_mlp, n_out=1, n_hidden=n_hidden, n_layers=n_layers
+        )  
+        self.createDimensionless = Dimensionless()
+
+        idx = jnp.array(
+            list(itertools.combinations_with_replacement(jnp.arange(0,4), r=2))
+        )
+        self.idx_map = jnp.array([2,3,0,1])
+        self.idx = self.idx_map[idx] 
+        self.idx_sqrt = jnp.concatenate(
+            [jnp.zeros(1,dtype=int), jnp.cumsum(jnp.arange(2,5)[::-1])], 
+            axis=0
+        ) 
+        print("Invariance Dimensionless")
+        
+    def compute_scalars_jax(self, x, g, mkl):
+        """Input x: (n, 4, 3), g: (n, 3), mkl: (n, 6)""" 
+        # get q2 - q1 replacing q2
+        x = x.at[:,1,:].set(x[:,1,:]-x[:,0,:])  
+        xx = jnp.sum(
+            x[:,self.idx[:,0],:]*x[:,self.idx[:,1],:], 
+            axis=-1
+        )
+        ## take square root of p_1^\top p_1, p_2^\top p_2, q_1^\top q_1, (q_2-q_1)^\top (q_2-q_1)
+        xx = xx.at[:,self.idx_sqrt].set(jnp.sqrt(xx[:,self.idx_sqrt]))
+        gx = jnp.einsum("...j,...ij", g, x[:,self.idx_map])
+        gg = jnp.sqrt(jnp.sum(g*g, axis = -1, keepdims=True))
+  
+        ## all the current scalars we have 
+        scalars = jnp.concatenate([mkl, gg, gx, xx], axis = -1) # (n, 21)
+        return scalars  
+    
+    def H(self, x, xp):  
+        g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)   
+        scalars = self.compute_scalars_jax(
+            x.reshape(-1,4,3), 
+            g.reshape(-1,3), 
+            mkl.reshape(-1,6)
+        ) 
+        ## make dimensionless
+        scalars, scaling = createDimensionless(scalars) 
+        scalars = jnp.concatenate(
+            [scalars,  jnp.reciprocal(scalars)], 
+            axis = -1
+        ) # (n, 36)
+        out = scaling * self.mlp(scalars).sum() 
+        return out
+    
+    def __call__(self, x, xp):
+        return self.H(x, xp)
