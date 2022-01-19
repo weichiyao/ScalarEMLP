@@ -605,12 +605,12 @@ class Dimensionless(object):
             powers_f[i] = 1
         i += 1
         for ii,j1 in enumerate(vectors):
-            names_f[i] = "|" + names[j1] + "|"
+            names_f[i] = "|" + x_names[j1] + "|"
             a_xs_f[i] = a_xs[j1]
             powers_f[i] = 1
             i += 1
             for j2 in vectors[ii+1:]:
-                names_f[i] = "(" + names[j1] + "^\\top " + names[j2] + ")"
+                names_f[i] = "(" + x_names[j1] + "^\\top " + x_names[j2] + ")"
                 a_xs_f[i] = a_xs[j1] + a_xs[j2] # because we are multiplying
                 powers_f[i] = 2
                 i+= 1
