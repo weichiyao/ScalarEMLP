@@ -741,13 +741,13 @@ class InvarianceLayerDL_objax(Module):
             mkl.reshape(-1,6)
         ) 
         ## make dimensionless
-        scalars, scaling = createDimensionless(scalars) 
+        scalars, scaling = self.createDimensionless(scalars) 
         scalars = jnp.concatenate(
             [scalars,  jnp.reciprocal(scalars)], 
             axis = -1
         ) # (n, 36)
-        out = scaling * self.mlp(scalars).sum() 
-        return out
+        out = scaling * self.mlp(scalars)
+        return out.sum() 
     
     def __call__(self, x, xp):
         return self.H(x, xp)
