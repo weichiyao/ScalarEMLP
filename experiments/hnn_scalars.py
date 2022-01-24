@@ -24,7 +24,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
                     'method':'qt', 'dimensionless':True, 'n_rad':50, 
                     'n_quantiles':200, 'transform_distribution':'uniform'
                 },
-                net_config={'n_layers':3,'n_hidden':100}, log_level='info',
+                net_config={'n_layers':3,'n_hidden':100,'div':2}, log_level='info',
                 trainer_config={'log_dir':'/home/','log_args':{'minPeriod':.02,'timeFrac':.75},},
                 save=False,):
     logging.getLogger().setLevel(levels[log_level])
