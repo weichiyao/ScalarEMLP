@@ -11,6 +11,7 @@ import jax
 import logging
 from functools import partial
 import objax
+import jax.numpy as jnp
 
 class Trainer(object,metaclass=Named):
     """ Base trainer
@@ -59,16 +60,20 @@ class Trainer(object,metaclass=Named):
         for self.epoch in tqdm(range(start_epoch, start_epoch + num_epochs),desc='train'):
             for i, minibatch in enumerate(self.dataloaders['train']):
                 step = i + self.epoch*steps_per_epoch
-                self.step(self.epoch+i/steps_per_epoch,minibatch)
+                a, b = self.step(self.epoch+i/steps_per_epoch,minibatch) 
+                if b == 1:
+                    print(f"\n epoch {self.epoch} step {step}, skip nan, loss = {round(a.tolist(),3)}")
                 with self.logger as do_log:
                     if do_log: self.logStuff(step, minibatch)
         self.epoch+=1
         self.logStuff(step)
 
     def step(self, epoch, minibatch):
-        grad,loss = self.gradvals(minibatch)
-        self.optimizer(self.lr_sched(epoch),grad)
-        return loss
+        grad_val, loss_val = self.gradvals(minibatch)
+        if jnp.isnan(grad_val[1]).any(): 
+            return loss_val[0], 1
+        self.optimizer(self.lr_sched(epoch), grad_val)
+        return loss_val[0], 0
 
     def logStuff(self, step, minibatch=None):
         metrics = {}
