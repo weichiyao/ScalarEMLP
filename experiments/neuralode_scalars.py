@@ -24,7 +24,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
                     'method':'rbf', 'dimensionless':False, 'n_rad':50, 
                     'n_quantiles':1000, 'transform_distribution':'uniform'
                 },
-                net_config={'n_layers':3,'n_hidden':100},log_level='warn',
+                net_config={'n_layers':3,'n_hidden':100,'div':1},log_level='warn',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},}, 
                 save=False,):
 
