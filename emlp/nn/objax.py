@@ -361,12 +361,14 @@ class BasicMLP_objax(Module):
         n_out,
         n_hidden=100, 
         n_layers=2, 
+        div=1
     ):
         super().__init__()
-        layers = [nn.Linear(n_in, n_hidden), F.relu]
+        layers = [nn.Linear(n_in, n_hidden), swish]
         for _ in range(n_layers):
-            layers.append(nn.Linear(n_hidden, n_hidden))
-            layers.append(F.relu)
+            layers.append(nn.Linear(n_hidden, n_hidden//div))
+            layers.append(swish)
+            n_hidden //= div
         layers.append(nn.Linear(n_hidden, n_out))
         
         self.mlp = Sequential(*layers)
@@ -541,6 +543,7 @@ class ScalarMLP(Module, metaclass=Named):
         self, 
         n_hidden, 
         n_layers, 
+        div,
         transformer, 
     ): 
         super().__init__()  
@@ -549,7 +552,7 @@ class ScalarMLP(Module, metaclass=Named):
         self.transformer = transformer  
 
         self.mlp = BasicMLP_objax(
-            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers
+            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
         )   
     
     def H(self, x, xp):  
