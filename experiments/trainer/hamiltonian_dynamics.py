@@ -260,7 +260,10 @@ class IntegratedDynamicsTrainer(Regressor):
     
     def logStuff(self, step, minibatch=None):
         loader = self.dataloaders['test']
-        metrics = {'test_Rollout': np.exp(self.evalAverageMetrics(loader,partial(log_rollout_error,loader.dataset,self.model)))}
+        metrics = np.exp(self.evalAverageMetrics(
+            loader, partial(log_rollout_error, loader.dataset, self.model)
+        ))
+        metrics = {'test_Rollout': metrics}
         print(step, metrics)
         self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)
