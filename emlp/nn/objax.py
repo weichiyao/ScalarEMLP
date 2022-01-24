@@ -1,5 +1,7 @@
 import jax
 import jax.numpy as jnp
+import jax.scipy.stats as jss
+
 import objax.nn as nn
 import objax.functional as F
 import numpy as np
@@ -20,7 +22,8 @@ from objax.nn.init import orthogonal
 from scipy.special import binom
 from jax import jit,vmap
 from functools import lru_cache as cache
-import itertools
+from functools import partial
+import itertools 
 from smithnormalform import snfproblem
 from smithnormalform import matrix as snfmatrix
 from smithnormalform import z as snfz
@@ -348,80 +351,8 @@ def gate_indices(sumrep): #TODO: add support for mixed_tensors
 
 
 ##############################################################################
-@export
-def radial_basis_transform(x, nrad = 100):
-    """
-    x is a vector
-    """
-    xmax, xmin = x.max(), x.min()
-    gamma = 2*(xmax - xmin)/(nrad - 1)
-    mu    = np.linspace(start=xmin, stop=xmax, num=nrad)
-    return mu, gamma
-
-
-def comp_inner_products(x, take_sqrt=True):
-    """
-    INPUT: batch (q1, q2, p1, p2)
-    N: number of datasets
-    dim: dimension  
-    x: numpy tensor of size [N, 4, dim] 
-    """
-   
-    n = x.shape[0]
-    scalars = np.einsum('bix,bjx->bij', x, x).reshape(n, -1) # (n,16)
-    if take_sqrt:
-        xxsqrt = np.sqrt(np.einsum('bix,bix->bi', x, x)) # (n,4)
-        scalars = np.concatenate([xxsqrt, scalars], axis = -1)  # (n,20)
-    return scalars 
-
-@export
-def compute_scalars(x, xp):
-    """Input x of dim [n, 4, 3], xp of dim [n, 9] = (g, m1, m2, k1, k2, l1, l2)"""
-    x = np.array(x)
-    xp = np.array(xp)
-    
-    idx = np.array(
-        list(itertools.combinations_with_replacement(np.arange(0,4), r=2))
-    )
-    idx_map = np.array([2,3,0,1])
-    idx = idx_map[idx] 
-    idx_sqrt = np.concatenate(
-        [np.zeros(1,dtype=int), np.cumsum(np.arange(2,5)[::-1])], 
-        axis=0
-    ) 
-    
-    g = xp[...,:3] # (n,6)
-    mkl = xp[...,3:] # (n,6) 
-    
-    x[:,1,:] = x[:,1,:]-x[:,0,:]  
-    xx = np.sum(
-        x[:,idx[:,0],:]*x[:,idx[:,1],:], 
-        axis=-1
-    ) # (n,10)
-    ## take square root of p_1^\top p_1, p_2^\top p_2, q_1^\top q_1, (q_2-q_1)^\top (q_2-q_1)
-    xs = np.sqrt(xx[:,idx_sqrt]) # (n,4)
-    gx = np.einsum("...j,...ij", g, x[:,idx_map]) # (n,4)
-    gg = np.sum(g*g, axis=-1, keepdims=True) #(n,1)
-        
-    ## all the current scalars we have 
-    scalars = np.concatenate([mkl, gg, np.sqrt(gg), gx, xx, xs], axis=-1) # (n, 26)
-    return scalars  
-
-
-def comp_inner_products_jax(x, take_sqrt=True):
-    """
-    INPUT: batch (q1, q2, p1, p2)
-    N: number of datasets
-    dim: dimension  
-    x: numpy tensor of size [N, 4, dim] 
-    """ 
-    n = x.shape[0]
-    scalars = jnp.einsum('bix,bjx->bij', x, x).reshape(n, -1) # (n, 16)
-    if take_sqrt:
-        xxsqrt = jnp.sqrt(jnp.einsum('bix,bix->bi', x, x)) # (n, 4)
-        scalars = jnp.concatenate([xxsqrt, scalars], axis = -1)  # (n, 20)
-    return scalars 
-
+ 
+ 
 @export
 class BasicMLP_objax(Module):
     def __init__(
@@ -443,119 +374,10 @@ class BasicMLP_objax(Module):
     def __call__(self,x,training=True):
         return self.mlp(x)
 
-@export
-class InvarianceLayer_objax(Module):
-    def __init__(
-        self,  
-        n_hidden, 
-        n_layers
-    ):
-        super().__init__()
-        self.n_in_mlp = 26
-        self.mlp = BasicMLP_objax(
-          n_in=self.n_in_mlp, n_out=1, n_hidden=n_hidden, n_layers=n_layers
-        )  
-        
-        idx = jnp.array(
-            list(itertools.combinations_with_replacement(jnp.arange(0,4), r=2))
-        )
-        self.idx_map = jnp.array([2,3,0,1])
-        self.idx = self.idx_map[idx] 
-        self.idx_sqrt = jnp.concatenate(
-            [jnp.zeros(1,dtype=int), jnp.cumsum(jnp.arange(2,5)[::-1])], 
-            axis=0
-        ) 
-
-    def compute_scalars_jax(self, x, g, mkl):
-        """Input x: (n, 4, 3), g: (n, 3), mkl: (n, 6)""" 
-        # get q2 - q1 replacing q2
-        x = x.at[:,1,:].set(x[:,1,:]-x[:,0,:])  
-        xx = jnp.sum(
-            x[:,self.idx[:,0],:]*x[:,self.idx[:,1],:], 
-            axis=-1
-        ) # (n,10)
-        ## take square root of p_1^\top p_1, p_2^\top p_2, q_1^\top q_1, (q_2-q_1)^\top (q_2-q_1)
-        xs = jnp.sqrt(xx[:,self.idx_sqrt]) # (n,4)
-        gx = jnp.einsum("...j,...ij", g, x[:,self.idx_map]) # (n,4)
-        gg = jnp.sum(g*g, axis = -1, keepdims=True) #(n,1)
-        
-        ## all the current scalars we have 
-        scalars = jnp.concatenate([mkl, gg, jnp.sqrt(gg), gx, xx, xs], axis = -1) # (n, 26)
-        return scalars  
-    
-    def H(self, x, xp): 
-        x = x.reshape(-1,4,3) 
-        g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
-        
-        scalars = self.compute_scalars_jax(x, g.reshape(-1,3), mkl.reshape(-1,6))
-        out = self.mlp(scalars)
-        return out.sum()  
-    
-    def __call__(self, x, xp):
-        return self.H(x, xp)
-
-@export
-class EquivarianceLayer_objax(Module):
-    def __init__(
-        self,  
-        n_hidden, 
-        n_layers,
-        mu, 
-        gamma
-    ):
-        super().__init__()  
-        self.mu = mu # (n_rad,)
-        self.gamma = gamma
-        self.n_in_mlp = len(mu)*26
-        self.mlp = BasicMLP_objax(
-          n_in=self.n_in_mlp, n_out=24, n_hidden=n_hidden, n_layers=n_layers
-        ) 
-
-        idx = jnp.array(
-            list(itertools.combinations_with_replacement(jnp.arange(0,4), r=2))
-        )
-        self.idx_map = jnp.array([2,3,0,1])
-        self.idx = self.idx_map[idx] 
-        self.idx_sqrt = jnp.concatenate(
-            [jnp.zeros(1,dtype=int), jnp.cumsum(jnp.arange(2,5)[::-1])], 
-            axis=0
-        ) 
-        
-    def compute_scalars_jax(self, x, g, mkl):
-        """Input x of dim [n, 4, 3]"""       
-        # get q2 - q1 replacing q2
-        x = x.at[:,1,:].set(x[:,1,:]-x[:,0,:])  
-        xx = jnp.sum(
-            x[:,self.idx[:,0],:]*x[:,self.idx[:,1],:], 
-            axis=-1
-        ) # (n,10)
-        ## take square root of p_1^\top p_1, p_2^\top p_2, q_1^\top q_1, (q_2-q_1)^\top (q_2-q_1)
-        xs = jnp.sqrt(xx[:,self.idx_sqrt]) # (n,4)
-        gx = jnp.einsum("...j,...ij", g, x[:,self.idx_map]) # (n,4)
-        gg = jnp.sum(g*g, axis = -1, keepdims=True) #(n,1)
-        
-        ## all the current scalars we have 
-        scalars = jnp.concatenate([mkl, gg, jnp.sqrt(gg), gx, xx, xs], axis = -1) # (n, 26)
-        return scalars  
-
-    def __call__(self, x, t, xp):
-        g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)  
-         
-        x = x.reshape(-1,4,3) # (n,4,3)
-        scalars = self.compute_scalars_jax(x, g.reshape(-1,3), mkl.reshape(-1,6)) # (n,26)
-        scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,26,n_rad)
-        scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,26,n_rad)
-        scalars = scalars.reshape(-1, self.n_in_mlp) #(n,26*n_rad)
-        out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
-        
-        y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
-        x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * g #(n,3)
-        x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * g #(n,3)
-        p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,19,:] * y + out[:,23,:] * g #(n,3)
-        p2 = jnp.sum(out[:,12:16,:]*x, axis = 1) + out[:,20,:] * y + out[:,24,:] * g #(n,3)
-        
-        return jnp.concatenate([x1,x2,p1,p2], axis=-1) #(n,12)
  
+
+
+@export
 class Dimensionless(object):
     def __init__(self):
         self.create_mapping()
@@ -665,7 +487,7 @@ class Dimensionless(object):
 
     def create_mapping(self): 
         """
-        nh: final scaling (2, 21)
+        nh: final scaling matrix (2, 21)
         h: dimentionless matrix (18,21)
         """
         a_xs, a_y, names, scalars, vectors = self.make_base()
@@ -677,77 +499,403 @@ class Dimensionless(object):
         self.nh[0][names_flat=="m_1"], self.nh[0][names_flat=="|p_1|"] = -1, 2
         self.nh[1][names_flat=="m_2"], self.nh[1][names_flat=="|p_2|"] = -1, 2
 
+    def map_m_func(self, params, x):
+        """x (21,) and h (18,21) gives output (18,)"""
+        return jnp.prod(x**params, axis=-1)
+
+    def map_s_func(self, params, x):
+        """x (21,) and h (2,21) gives output ()"""
+        return jnp.sum(jnp.prod(x**params, axis=-1), keepdims=True)
+
     def __call__(self, x):
         """
         Input 
         - x: scalars with dimensions (n, 21)
         Output
         - x_dl: dimensionless scalars (n, 18)
-        - x_s: scaling (n,1)  
+        - x_sc: scaling (n,1)  
         """
         ## Broadcasting: (n, 21) & (18, 21) => (n, 18, 21) => (n, 18)
-        x_dl = jnp.prod(jnp.expand_dims(x, axis = 1) ** self.h, axis=-1) 
-        x_sc = jnp.prod(jnp.expand_dims(x, axis = 1) ** self.nh, axis=-1)
-        x_sc = jnp.sum(x_sc, axis = -1, keepdims=True) 
+        x_dl = jit(vmap(jit(partial(self.map_m_func, self.h))))(x)
+        x_sc = jit(vmap(jit(partial(self.map_s_func, self.nh))))(x) 
         return x_dl, x_sc 
      
 @export
-class InvarianceLayerDL_objax(Module):
+class ScalarMLP(Module, metaclass=Named):
+    """ Scalar Invariant MultiLayer Perceptron. 
+    Arguments 
+    -------
+    n_in : int
+        number of inputs to MLP
+    n_hidden: int
+        number of hidden units in MLP
+    n_layers: int
+        number of layers between input and output layers
+          
+    Returns:
+    -------
+    Module: 
+        the ScalarMLP objax module.
+    """
     def __init__(
-        self,   
+        self, 
         n_hidden, 
         n_layers, 
-    ):
-        super().__init__() 
-        self.n_in_mlp = 36
-        self.mlp = BasicMLP_objax(
-          n_in=self.n_in_mlp, n_out=1, n_hidden=n_hidden, n_layers=n_layers
-        )  
-        self.createDimensionless = Dimensionless()
+        transformer, 
+    ): 
+        super().__init__()  
+         
+        n_in = transformer.n_features
+        self.transformer = transformer  
 
+        self.mlp = BasicMLP_objax(
+            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers
+        )   
+    
+    def H(self, x, xp):  
+        scalars, scaling = self.transformer(x,xp)  
+        out = scaling * self.mlp(scalars)
+        return out.sum()  
+    
+    def __call__(self, x, xp, training = True):
+        return self.H(x, xp)
+
+@export
+class EquivarianceLayer_objax(ScalarMLP):
+    def __call__(self, x, t, xp):
+        scalars, _ = self.transformer(x, xp) # (n, n_in)
+        out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
+        
+        y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
+        out = jnp.sum(out[:,:16].reshape(-1,4,4,1) * jnp.expand_dims(x, 1), axis=1) # (n,4,3)
+        out += out[:,16:19] * jnp.expand_dims(y,1) # (n,4,3)
+        out += out[:19:] * jnp.expand_dims(g,1) # (n,4,3)
+    
+        # x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,16,:] * y + out[:,20,:] * g #(n,3)
+        # x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * g #(n,3)
+        # p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * g #(n,3)
+        # p2 = jnp.sum(out[:,12:16,:]*x, axis = 1) + out[:,19,:] * y + out[:,23,:] * g #(n,3)
+        
+        return out.reshape(-1, 12) #(n,12)
+
+@export  
+class InvarianceLayer_objax(ScalarMLP):
+    def __call__(self, x, xp):
+        return self.H(x, xp)
+ 
+
+ 
+
+@export
+class ScalarTransformer(object):
+    """Transform (dimensionless) features using quantiles info or radial basis function.
+    
+    During the initialization stage, this method takes the whole training data set, 
+    zs (n,4,3) and zps (n,9), and conducts the following transformation: 
+                zs, zps
+        Step 0  => inner product scalars 
+        Step 1  => dimensionless scalars                   (optional, dimensionless = True)
+        Step 2  => rbf (or quantile) transformed scalars   (optional, method = 'rbf' (method = 'qt'))
+    Either one or both of the two optional steps can be skipped. 
+    If method is not 'none', transformer information (parameters) is recorded.
+    
+    When the Object is called, the input scalars go through: 
+        Step 1 (optional)
+        Step 2 (optional)
+    depending on the values of the arguments, dimensionless and method
+            
+    
+    Arguments
+    ----------
+    zs : jax.numpy.ndarray (n, 4, 3)
+        Double pendulum TRAINING data positions and velocities q1, q2, p1, p2
+
+    zps : jax.numpy.ndarray (n, 9) 
+        Double pendulum TRAINING data parameters g, m1, m2, k1, k2, l1, l2
+    
+    dimensionless : bool
+        whether we want to make the scalars dimensionless 
+    
+    method : str, 'qt' or 'rbf' or 'none'
+
+    n_quantiles : int, default=1000 or n
+        Number of quantiles to be computed. It corresponds to the number
+        of landmarks used to discretize the cumulative distribution function.
+
+
+    Attributes
+    ----------
+    n_features : int 
+        number of features in the (dimensionless) (transformed) output
+
+    dimensionless_operator : lambda x : (x,1) or emlp.nn.objax.Dimensionless() funcion
+        
+
+    ===========================================================================
+    RBF : Transform features using radial basis function
+
+    Quantile : Transform features using quantiles information  
+        Adapted from scikit_learn.preprocessing.QuantileTransformer. 
+
+        This method transforms the features to follow a uniform or a normal
+        distribution. Therefore, for a given feature, this transformation tends
+        to spread out the most frequent values. It also reduces the impact of
+        (marginal) outliers: this is therefore a robust preprocessing scheme.
+        
+        The transformation is applied on each feature independently. 
+        
+        Features values of new/unseen data that fall below or above the fitted range 
+        will be mapped to the bounds of the output distribution. 
+        
+        Note that this transform is non-linear. It may distort linear
+        correlations between variables measured at the same scale but renders
+        variables measured at different scales more directly comparable. 
+
+        
+   
+    """
+    def __init__(
+        self, 
+        zs, 
+        zps, 
+        method, 
+        dimensionless = False,
+        n_rad = 100,
+        n_quantiles = 1000, 
+        transform_distribution='uniform'   
+    ):  
+        zs, zps = jnp.array(zs), jnp.array(zps)
+        # Create mapping idex for inner product scalars computation
+        self._create_index()
+
+        # Create inner product scalars
+        scalars = self._compute_scalars(
+            zs, 
+            zps[:,:3], 
+            zps[:,3:]
+        )   
+
+        self.dimensionless_operator = lambda x: (x, 1) 
+        self.scaling_standardization = 0, 1
+        if dimensionless:
+            # Create dimensionless features 
+            self.dimensionless_operator = Dimensionless() 
+            scalars, scaling = self.dimensionless_operator(scalars)
+            print(f"scaling max={jnp.max(scaling)} and min={jnp.min(scaling)}")
+            self.scaling_standardization = jnp.min(scaling), jnp.max(scaling) - jnp.min(scaling)
+            
+
+        self.method = method
+        self.dimensionless = dimensionless
+        self.n_rad = n_rad
+        self.n_quantiles = n_quantiles
+        self.transform_distribution = transform_distribution
+        # Create the quantiles of reference
+        self.references = jnp.linspace(0, 1, self.n_quantiles, endpoint=True)
+        self.BOUNDS_THRESHOLD = 1e-7 
+        self.spacing = jnp.array(np.spacing(1)) 
+        
+        self._GETPARAMS = {
+            'qt': self._get_qt_params,
+            'rbf': self._get_rbf_params,
+            'none': lambda x: (None, scalars.shape[-1])
+        }
+        # Compute the global quansformation parameters
+        self._GETPARAMS[self.method](scalars)
+       
+        self._TRANSFORMS = {
+            'qt': self._qt_transform,
+            'rbf': self._rbf_transform,
+            'none': lambda x: x
+        }
+
+    def _create_index(self):
+        """create the indexing for the construction of the inner product scalars"""
         idx = jnp.array(
             list(itertools.combinations_with_replacement(jnp.arange(0,4), r=2))
         )
         self.idx_map = jnp.array([2,3,0,1])
         self.idx = self.idx_map[idx] 
         self.idx_sqrt = jnp.concatenate(
-            [jnp.zeros(1,dtype=int), jnp.cumsum(jnp.arange(2,5)[::-1])], 
+            [jnp.zeros(1, dtype=int), jnp.cumsum(jnp.arange(2,5)[::-1])], 
             axis=0
         ) 
-        print("Invariance Dimensionless")
+
+    def _get_rbf_params(self, x):
+        """Gets parameters for Radial Basis Function Transformation:
         
-    def compute_scalars_jax(self, x, g, mkl):
-        """Input x: (n, 4, 3), g: (n, 3), mkl: (n, 6)""" 
+        Arguments 
+        -----------
+        x : jax.numpy.ndarray (n, d)
+
+        n_rad : int
+            number of transformed outputs for each d
+
+        Returns
+        -----------
+        params : jax.numpy.ndarray (n_rad+1, d)
+            params[0] gives gamma (1, d)
+            params[1:] gives mu (n_rad, d)
+
+        n_features: int 
+            number of features in the transformed output
+
+        Remarks
+        -----------
+        Given mu (n,d) and gamma (d,), RBF for x (n,d) gives x_trans (n,n_rad)
+        x_trans[:,i] = exp(-gamma[:,i]*(x[:,i]-mu[:,i])**2), i=1,...,d
+
+        """ 
+        xmin = jnp.min(x, axis=0, keepdims=True) # (1,d) 
+        xmax = jnp.max(x, axis=0, keepdims=True) # (1,d)
+        gamma = 2*(xmax - xmin)/(self.n_rad - 1) # (1,d)
+        mu    = jnp.linspace(start=xmin[0], stop=xmax[0], num=self.n_rad) # (nrad, d)
+        self.parameters = jnp.concatenate([gamma, mu], axis=0) # (n_rad+1,d)
+        self.n_features = x.shape[1]*self.n_rad
+
+    def _get_qt_params(self, x): 
+        """Gets parameters for Quantile Transformation
+        
+        Arguments:
+        ----------
+        x : jax.numpy.ndarray (n, d)
+
+        self.references : (array_like of float) 
+            Percentile or sequence of percentiles to compute, 
+            which must be between 0 and 100 inclusive.
+
+        Returns 
+        ---------
+        quantiles : numpy.ndarray of shape (n_quantiles, d)
+            The values corresponding the quantiles of reference.
+
+        n_features: int 
+            number of features in the transformed output
+        """ 
+        self.parameters = jnp.nanpercentile(x, self.references*100, axis=0)
+        self.n_features = x.shape[1] 
+
+    def _rbf_transform(self, X):
+        """RBF : Transform features using radial basis function 
+
+        Arguments
+        ----------
+        X : jax.numpy.ndarray (n, d)
+
+        self.parameters : jax numpy ndarray (n_rad+1, d)
+            self.parameters[0] gives gamma (1, d)
+            self.parameters[1:] gives mu (n_rad, d)
+
+        Returns
+        ----------
+        X : jax.numpy.ndarray (n, n_rad*d)
+        """
+        n = X.shape[0]
+        return jnp.exp(-self.parameters[0] * (X-self.parameters[1:])**2).reshape(n,-1)
+    
+    def _qt_transform(self, X): 
+        """Forward quantile transform.
+        
+        Arguments
+        ----------
+        X : jax.numpy.ndarray of shape (n, d)
+            The data used to scale along the features axis. 
+
+        self.parameters : jax.numpy.ndarray of shape (n_quantiles, d)
+            The values corresponding the quantiles of reference.
+        
+        self.transform_distribution : {'uniform', 'normal'}, default='uniform'
+            Marginal distribution for the transformed data. The choices are
+            'uniform' (default) or 'normal'.
+
+        Returns
+        -------
+        X : jax ndarray of shape (n, d)
+            Projected data.
+        """ 
+        
+        X = vmap(jit(self._qt_transform_col), in_axes=(1,1), out_axes=1)(X, self.parameters) 
+        return X
+
+    def _qt_transform_col(self, X_col, params):
+        """Private function to forward transform a single feature."""
+        lower_bound_x = params[0]
+        upper_bound_x = params[-1]
+        lower_bound_y = 0
+        upper_bound_y = 1
+        n = X_col.shape[0]
+
+        lower_bounds_idx = jnp.nonzero(
+            X_col - self.BOUNDS_THRESHOLD < lower_bound_x, 
+            size = n, 
+            fill_value = n+1 # impossible indices
+        )
+         
+        upper_bounds_idx = jnp.nonzero(
+            X_col + self.BOUNDS_THRESHOLD > upper_bound_x, 
+            size = n, 
+            fill_value = n+1 # impossible indices
+        )
+        
+        # Interpolate in one direction and in the other and take the
+        # mean. This is in case of repeated values in the features
+        # and hence repeated quantiles
+        #
+        # If we don't do this, only one extreme of the duplicated is
+        # used (the upper when we do ascending, and the
+        # lower for descending). We take the mean of these two
+          
+        X_col = 0.5 * (
+            jnp.interp(X_col, params, self.references)
+            - jnp.interp(-X_col, -params[::-1], -self.references[::-1])
+        )
+         
+        X_col = X_col.at[upper_bounds_idx].set(upper_bound_y)
+        X_col = X_col.at[lower_bounds_idx].set(lower_bound_y)
+
+        # for forward transform, match the output PDF
+        if self.transform_distribution == "normal":  
+            X_col = jss.norm.ppf(X_col)
+            # find the value to clip the data to avoid mapping to
+            # infinity. Clip such that the inverse transform will be
+            # consistent
+            clip_min = jss.norm.ppf(self.BOUNDS_THRESHOLD - self.spacing)
+            clip_max = jss.norm.ppf(1 - (self.BOUNDS_THRESHOLD - self.spacing))
+            X_col = jnp.clip(X_col, clip_min, clip_max)
+        
+        # else output distribution is uniform and the ppf is the
+        # identity function so we let X_col unchanged
+        return X_col
+    
+    def _compute_scalars(self, x, g, mkl):
+        """Input x of dim (n,4,3), g of dim (n,3), mkl = (m1, m2, k1, k2, l1, l2) of (n,6)"""
         # get q2 - q1 replacing q2
         x = x.at[:,1,:].set(x[:,1,:]-x[:,0,:])  
         xx = jnp.sum(
-            x[:,self.idx[:,0],:]*x[:,self.idx[:,1],:], 
+            x[:,self.idx[:,0],:] * x[:,self.idx[:,1],:], 
             axis=-1
         )
         ## take square root of p_1^\top p_1, p_2^\top p_2, q_1^\top q_1, (q_2-q_1)^\top (q_2-q_1)
         xx = xx.at[:,self.idx_sqrt].set(jnp.sqrt(xx[:,self.idx_sqrt]))
         gx = jnp.einsum("...j,...ij", g, x[:,self.idx_map])
         gg = jnp.sqrt(jnp.sum(g*g, axis = -1, keepdims=True))
-  
+
         ## all the current scalars we have 
         scalars = jnp.concatenate([mkl, gg, gx, xx], axis = -1) # (n, 21)
         return scalars  
+
+    def __call__(self, xs, xps):
+        g, mkl = xps[...,:3], xps[...,3:] # (n,3), (n,6)  
+        # Compute inner product scalars 
+        scalars = self._compute_scalars(
+            xs.reshape(-1,4,3), g.reshape(-1,3), mkl.reshape(-1,6)
+        )
+        # Create dimensionless features 
+        scalars, scaling = self.dimensionless_operator(scalars)
+        # Standardize scalings 
+        scaling = (scaling - self.scaling_standardization[0]) / self.scaling_standardization[1]
+        
+        return jit(self._TRANSFORMS[self.method])(scalars), scaling
+
     
-    def H(self, x, xp):  
-        g, mkl = xp[...,:3], xp[...,3:] # (n,3), (n,6)   
-        scalars = self.compute_scalars_jax(
-            x.reshape(-1,4,3), 
-            g.reshape(-1,3), 
-            mkl.reshape(-1,6)
-        ) 
-        ## make dimensionless
-        scalars, scaling = self.createDimensionless(scalars) 
-        scalars = jnp.concatenate(
-            [scalars,  jnp.reciprocal(scalars)], 
-            axis = -1
-        ) # (n, 36)
-        out = scaling * self.mlp(scalars)
-        return out.sum() 
     
-    def __call__(self, x, xp):
-        return self.H(x, xp)
