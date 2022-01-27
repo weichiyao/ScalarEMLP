@@ -533,6 +533,10 @@ class ScalarMLP(Module, metaclass=Named):
         number of hidden units in MLP
     n_layers: int
         number of layers between input and output layers
+    div: int
+        scale the number of hidden units at each subsequent layer of MLP 
+    transformer: Callable
+        transformation attributes and functions
           
     Returns:
     -------
