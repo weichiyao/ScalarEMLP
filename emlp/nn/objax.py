@@ -28,6 +28,8 @@ from smithnormalform import snfproblem
 from smithnormalform import matrix as snfmatrix
 from smithnormalform import z as snfz
 
+from typing import Callable, List
+
 def Sequential(*args):
     """ Wrapped to mimic pytorch syntax"""
     return nn.Sequential(args)
@@ -357,18 +359,18 @@ def gate_indices(sumrep): #TODO: add support for mixed_tensors
 class BasicMLP_objax(Module):
     def __init__(
         self, 
-        n_in, 
-        n_out,
-        n_hidden=100, 
-        n_layers=2, 
-        div=1
+        n_in: int, 
+        n_out: int,
+        n_hidden: int = 100, 
+        n_layers: int = 2,
+        div: int = 2 
     ):
         super().__init__()
         layers = [nn.Linear(n_in, n_hidden), swish]
         for _ in range(n_layers):
             layers.append(nn.Linear(n_hidden, n_hidden//div))
             layers.append(swish)
-            n_hidden //= div
+            n_hidden //= div 
         layers.append(nn.Linear(n_hidden, n_out))
         
         self.mlp = Sequential(*layers)
@@ -377,12 +379,102 @@ class BasicMLP_objax(Module):
         return self.mlp(x)
 
  
+@export
+class ScalarMLP(Module, metaclass=Named):
+    """ Scalar Invariant MultiLayer Perceptron. 
+    Arguments 
+    -------
+    n_in : int
+        number of inputs to MLP
+    n_hidden: int
+        number of hidden units in MLP
+    n_layers: int
+        number of layers between input and output layers
+    div: int
+        scale the number of hidden units at each subsequent layer of MLP 
+    transformer: Callable
+        transformation attributes and functions
+          
+    Returns:
+    -------
+    Module: 
+        the ScalarMLP objax module.
+    """
+    def __init__(
+        self, 
+        n_hidden: int, 
+        n_layers: int, 
+        div: int,
+        transformer: Callable, 
+    ): 
+        super().__init__()  
+         
+        n_in = transformer.n_features
+        self.transformer = transformer  
 
+        self.mlp = BasicMLP_objax(
+            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
+        )   
+    
+    def H(self, x, xp):  
+        scalars, _ = self.transformer(x,xp)  
+        out = self.mlp(scalars)
+        return out.sum()  
+    
+    def __call__(self, x, xp, training = True):
+        return self.H(x, xp)
+
+@export
+class EquivarianceLayer_objax(ScalarMLP):
+    def __call__(self, x, t, xp):
+        scalars, _ = self.transformer(x, xp) # (n, n_in)
+        out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
+        
+        y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
+        out = jnp.sum(out[:,:16].reshape(-1,4,4,1) * jnp.expand_dims(x, 1), axis=1) # (n,4,3)
+        out += out[:,16:19] * jnp.expand_dims(y,1) # (n,4,3)
+        out += out[:19:] * jnp.expand_dims(g,1) # (n,4,3)
+    
+        # x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,16,:] * y + out[:,20,:] * g #(n,3)
+        # x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * g #(n,3)
+        # p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * g #(n,3)
+        # p2 = jnp.sum(out[:,12:16,:]*x, axis = 1) + out[:,19,:] * y + out[:,23,:] * g #(n,3)
+        
+        return out.reshape(-1, 12) #(n,12)
+
+@export  
+class InvarianceLayer_objax(ScalarMLP):
+    def __init__(
+        self, 
+        n_hidden: int, 
+        n_layers: int, 
+        div: int,
+        transformer: Callable, 
+    ):   
+        n_in = transformer.n_features
+        self.transformer = transformer  
+
+        self.mlp1 = BasicMLP_objax(
+            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
+        )   
+        self.mlp2 = BasicMLP_objax(
+            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
+        )   
+    
+    def H(self, x, xp):  
+        scalars, scaling = self.transformer(x,xp)  
+        out = scaling[:,0] * self.mlp1(scalars) + scaling[:,1] * self.mlp2(scalars)
+        return out.sum()  
+    
+    def __call__(self, x, xp, training = True):
+        return self.H(x, xp)
+ 
 
 @export
 class Dimensionless(object):
     def __init__(self):
         self.create_mapping()
+        self.adjust_mapping()
         self.h = jnp.array(self.h)
         self.nh = jnp.array(self.nh)
 
@@ -416,19 +508,18 @@ class Dimensionless(object):
         reformat the blobby features into flat, scalar features:
         hack; totally non-pythonic
         """
-        J, S_f = a_xs.shape
+        _, S_f = a_xs.shape
         foo = len(vectors)
         J_f = len(scalars) + foo * (foo + 1) // 2
         names_f = np.zeros(J_f).astype(str)
-        a_xs_f = np.zeros((J_f, S_f)).astype(int)
-        j_f = 0
+        a_xs_f = np.zeros((J_f, S_f)).astype(int) 
         powers_f = np.zeros(J_f).astype(int)
-        for i,j in enumerate(scalars):
+        for i, j in enumerate(scalars):
             names_f[i] = x_names[j]
             a_xs_f[i] = a_xs[j]
             powers_f[i] = 1
         i += 1
-        for ii,j1 in enumerate(vectors):
+        for ii, j1 in enumerate(vectors):
             names_f[i] = "|" + x_names[j1] + "|"
             a_xs_f[i] = a_xs[j1]
             powers_f[i] = 1
@@ -501,97 +592,95 @@ class Dimensionless(object):
         self.nh[0][names_flat=="m_1"], self.nh[0][names_flat=="|p_1|"] = -1, 2
         self.nh[1][names_flat=="m_2"], self.nh[1][names_flat=="|p_2|"] = -1, 2
 
+    def adjust_mapping(self):
+        self.h[0] = -self.h[0]
+        self.h[3] = -self.h[3]
+        self.h[4] = -self.h[4]
+        self.h[5] = -self.h[5]
+        assert self.h[5][7] == 3
+        assert self.h[5][8] == -1 
+        self.h[5][7] = 0
+        self.h[5][8] = 0 
+        h_new = np.concatenate([[0], self.h[5][:-1]])
+        self.h[5][6] = -1 
+        self.h[5][11] = 2 
+        h_new[6] = -1
+        h_new[15] = 2
+        assert self.h[10][7] == -1 
+        assert self.h[10][13] == 1 
+        assert self.h[11][7] == -1 
+        assert self.h[11][14] == 1 
+        assert self.h[11][0] == -1
+        assert self.h[11][2] == 1 
+        self.h[10][7] = 0
+        self.h[10][13] = 0 
+        self.h[11][7] = 0 
+        self.h[11][14] = 0 
+        self.h[10][9] = 1
+        self.h[11][10] = 1 
+
+        self.h[11][0] = 0
+        self.h[11][2] = 0
+        self.h[11][1] = -1 
+        self.h[11][3] = 1
+        assert self.h[15][4] == -1
+        assert self.h[16][4] == -2
+        assert self.h[17][4] == -1
+        assert self.h[15][18] == 1
+        assert self.h[17][20] == 1
+        self.h[16][4] = -1
+        self.h[16][5] = -1
+
+        self.h[15][4] = -2 
+        self.h[17][4] = 0
+        self.h[17][5] = -2
+
+        self.h[15][18] = 2
+        self.h[17][20] = 2
+
+        keepidx = [0,1,2,3,4,5,6,7,8,10,11,15,16,17] 
+        h_ad = np.zeros((len(keepidx),self.h.shape[1]))
+        for i in range(len(keepidx)):
+            h_ad[i] = self.h[keepidx[i]] 
+        h_ad[6] = h_new 
+        h_ad[7] = -self.h[1] 
+        h_ad[8] = -self.h[2]    
+
+        self.h = h_ad
+        self.nh = np.zeros((2,self.h.shape[1]))
+        self.nh[0][2] = 1
+        self.nh[1][3] = 1
+        self.nh[0][4] = 2
+        self.nh[1][5] = 2
+
     def map_m_func(self, params, x):
-        """x (21,) and h (18,21) gives output (18,)"""
+        """x (d,) and h (m,d) gives output (m,)"""
         return jnp.prod(x**params, axis=-1)
 
-    def map_s_func(self, params, x):
-        """x (21,) and h (2,21) gives output ()"""
-        return jnp.sum(jnp.prod(x**params, axis=-1), keepdims=True)
+    # def map_s_func(self, params, x):
+    #     """x (d,) and h (2,d) gives output (1,)"""
+    #     return jnp.sum(jnp.prod(x**params, axis=-1), keepdims=True)
 
-    def __call__(self, x):
+    def __call__(self, x, expand=True):
         """
         Input 
-        - x: scalars with dimensions (n, 21)
+        - x: scalars with dimensions (n, d)
         Output
-        - x_dl: dimensionless scalars (n, 18)
-        - x_sc: scaling (n,1)  
+        - x_dl: dimensionless scalars (n, m)
+        - x_sc: scaling (n,2)  
         """
-        ## Broadcasting: (n, 21) & (18, 21) => (n, 18, 21) => (n, 18)
+        ## Broadcasting: (n, d) & (m, d) => (n, m, d) => (n, m)
         x_dl = jit(vmap(jit(partial(self.map_m_func, self.h))))(x)
-        x_sc = jit(vmap(jit(partial(self.map_s_func, self.nh))))(x) 
+        if expand:
+            # Expand the scalar set by considering functions of the scalars 
+            x_dl = jnp.concatenate(
+                [x_dl, jnp.sqrt(jnp.abs(x_dl))], 
+                axis=-1
+            )
+        ## Broadcasting: (n, d) & (2, d) => (n, 2, d) => (n, 2)
+        x_sc = jit(vmap(jit(partial(self.map_m_func, self.nh))))(x) 
         return x_dl, x_sc 
-     
-@export
-class ScalarMLP(Module, metaclass=Named):
-    """ Scalar Invariant MultiLayer Perceptron. 
-    Arguments 
-    -------
-    n_in : int
-        number of inputs to MLP
-    n_hidden: int
-        number of hidden units in MLP
-    n_layers: int
-        number of layers between input and output layers
-    div: int
-        scale the number of hidden units at each subsequent layer of MLP 
-    transformer: Callable
-        transformation attributes and functions
-          
-    Returns:
-    -------
-    Module: 
-        the ScalarMLP objax module.
-    """
-    def __init__(
-        self, 
-        n_hidden, 
-        n_layers, 
-        div,
-        transformer, 
-    ): 
-        super().__init__()  
-         
-        n_in = transformer.n_features
-        self.transformer = transformer  
-
-        self.mlp = BasicMLP_objax(
-            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
-        )   
-    
-    def H(self, x, xp):  
-        scalars, scaling = self.transformer(x,xp)  
-        out = scaling * self.mlp(scalars)
-        return out.sum()  
-    
-    def __call__(self, x, xp, training = True):
-        return self.H(x, xp)
-
-@export
-class EquivarianceLayer_objax(ScalarMLP):
-    def __call__(self, x, t, xp):
-        scalars, _ = self.transformer(x, xp) # (n, n_in)
-        out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
-        
-        y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
-        out = jnp.sum(out[:,:16].reshape(-1,4,4,1) * jnp.expand_dims(x, 1), axis=1) # (n,4,3)
-        out += out[:,16:19] * jnp.expand_dims(y,1) # (n,4,3)
-        out += out[:19:] * jnp.expand_dims(g,1) # (n,4,3)
-    
-        # x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,16,:] * y + out[:,20,:] * g #(n,3)
-        # x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * g #(n,3)
-        # p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * g #(n,3)
-        # p2 = jnp.sum(out[:,12:16,:]*x, axis = 1) + out[:,19,:] * y + out[:,23,:] * g #(n,3)
-        
-        return out.reshape(-1, 12) #(n,12)
-
-@export  
-class InvarianceLayer_objax(ScalarMLP):
-    def __call__(self, x, xp):
-        return self.H(x, xp)
- 
-
- 
+      
 
 @export
 class ScalarTransformer(object):
@@ -639,9 +728,9 @@ class ScalarTransformer(object):
         
 
     ===========================================================================
-    RBF : Transform features using radial basis function
+    rbf : Transform features using radial basis function
 
-    Quantile : Transform features using quantiles information  
+    qt: Transform features using quantiles information  
         Adapted from scikit_learn.preprocessing.QuantileTransformer. 
 
         This method transforms the features to follow a uniform or a normal
@@ -658,18 +747,17 @@ class ScalarTransformer(object):
         correlations between variables measured at the same scale but renders
         variables measured at different scales more directly comparable. 
 
-        
-   
+    none : Only perform standardization for each feature 
     """
     def __init__(
         self, 
         zs, 
         zps, 
-        method, 
-        dimensionless = False,
-        n_rad = 100,
-        n_quantiles = 1000, 
-        transform_distribution='uniform'   
+        method: str = 'none', 
+        dimensionless: bool = False,
+        n_rad: int = 100,
+        n_quantiles: int = 1000, 
+        transform_distribution: str = 'uniform'   
     ):  
         zs, zps = jnp.array(zs), jnp.array(zps)
         # Create mapping idex for inner product scalars computation
@@ -682,14 +770,17 @@ class ScalarTransformer(object):
             zps[:,3:]
         )   
 
-        self.dimensionless_operator = lambda x: (x, 1) 
-        self.scaling_standardization = 0, 1
+        self.dimensionless_operator = lambda x: (x, jnp.array([1,1])) 
+        self.scaling_standardization = jnp.array([[0,0],[1,1]])
         if dimensionless:
             # Create dimensionless features 
             self.dimensionless_operator = Dimensionless() 
             scalars, scaling = self.dimensionless_operator(scalars)
             print(f"scaling max={jnp.max(scaling)} and min={jnp.min(scaling)}")
-            self.scaling_standardization = jnp.min(scaling), jnp.max(scaling) - jnp.min(scaling)
+            self.scaling_standardization = jnp.stack(
+                [jnp.min(scaling, axis=0), jnp.max(scaling, axis=0) - jnp.min(scaling, axis=0)],
+                axis = 0
+            )
             
 
         self.method = method
@@ -704,16 +795,17 @@ class ScalarTransformer(object):
         
         self._GETPARAMS = {
             'qt': self._get_qt_params,
-            'rbf': self._get_rbf_params,
-            'none': lambda x: (None, scalars.shape[-1])
+            'rbf': self._get_rbf_params, 
+            'none': self._get_none_params
         }
+        
         # Compute the global quansformation parameters
         self._GETPARAMS[self.method](scalars)
        
         self._TRANSFORMS = {
             'qt': self._qt_transform,
             'rbf': self._rbf_transform,
-            'none': lambda x: x
+            'none': self._none_transform
         }
 
     def _create_index(self):
@@ -727,6 +819,27 @@ class ScalarTransformer(object):
             [jnp.zeros(1, dtype=int), jnp.cumsum(jnp.arange(2,5)[::-1])], 
             axis=0
         ) 
+
+    def _get_none_params(self, x):
+        """Gets parameters for standardization transformation:
+        
+        Arguments 
+        -----------
+        x : jax.numpy.ndarray (n, d)
+
+        Returns
+        -----------
+        params : jax.numpy.ndarray (2, d)
+            params[0] gives mean
+            params[1] gives std
+
+        n_features: int 
+            number of features in the transformed output
+
+        """ 
+        # If transformer method == "none":
+        self.parameters = jnp.stack([jnp.mean(x, axis = 0), jnp.std(x, axis = 0)], axis = 0)
+        self.n_features = x.shape[-1]
 
     def _get_rbf_params(self, x):
         """Gets parameters for Radial Basis Function Transformation:
@@ -759,7 +872,7 @@ class ScalarTransformer(object):
         mu    = jnp.linspace(start=xmin[0], stop=xmax[0], num=self.n_rad) # (nrad, d)
         self.parameters = jnp.concatenate([gamma, mu], axis=0) # (n_rad+1,d)
         self.n_features = x.shape[1]*self.n_rad
-
+        
     def _get_qt_params(self, x): 
         """Gets parameters for Quantile Transformation
         
@@ -781,6 +894,9 @@ class ScalarTransformer(object):
         """ 
         self.parameters = jnp.nanpercentile(x, self.references*100, axis=0)
         self.n_features = x.shape[1] 
+    
+    def _none_transform(self, X):
+        return (X-self.parameters[0])/self.parameters[1]
 
     def _rbf_transform(self, X):
         """RBF : Transform features using radial basis function 
@@ -835,13 +951,13 @@ class ScalarTransformer(object):
         lower_bounds_idx = jnp.nonzero(
             X_col - self.BOUNDS_THRESHOLD < lower_bound_x, 
             size = n, 
-            fill_value = n+1 # impossible indices
+            fill_value = n+1
         )
          
         upper_bounds_idx = jnp.nonzero(
             X_col + self.BOUNDS_THRESHOLD > upper_bound_x, 
             size = n, 
-            fill_value = n+1 # impossible indices
+            fill_value = n+1
         )
         
         # Interpolate in one direction and in the other and take the
@@ -899,6 +1015,7 @@ class ScalarTransformer(object):
         )
         # Create dimensionless features 
         scalars, scaling = self.dimensionless_operator(scalars)
+        
         # Standardize scalings 
         scaling = (scaling - self.scaling_standardization[0]) / self.scaling_standardization[1]
         
