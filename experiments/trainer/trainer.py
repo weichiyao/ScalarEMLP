@@ -8,16 +8,20 @@ import glob
 import numpy as np
 from natsort import natsorted
 import jax
+from jax import lax
+from jax import numpy as jnp
+from jax.example_libraries import optimizers as jeoptim
+from jax.tree_util import tree_map
+
 import logging
 from functools import partial
-import objax
-import jax.numpy as jnp
+import objax 
 
 class Trainer(object,metaclass=Named):
     """ Base trainer
         """
-    def __init__(self, model, dataloaders, optim = objax.optimizer.Adam,lr_sched =lambda e:1,
-                log_dir=None, log_suffix='',log_args={},early_stop_metric=None):
+    def __init__(self, model, dataloaders, optim = objax.optimizer.Adam, lr_sched =lambda e:1, 
+                 max_grad_norm=float('inf'), log_dir=None, log_suffix='',log_args={},early_stop_metric=None):
         # Setup model, optimizer, and dataloaders
         self.model = model#
         #self.model= objax.Jit(objax.ForceArgs(model,training=True)) #TODO: figure out static nums
@@ -28,7 +32,7 @@ class Trainer(object,metaclass=Named):
         #self.model.predict = objax.ForceArgs(model.__call__,training=False)
         #self.model = objax.Jit(lambda x, training: model(x,training=training),model.vars(),static_argnums=(1,))
         #self.model = objax.Jit(model,static_argnums=(1,))
-        
+        self.max_grad_norm = max_grad_norm
         self.optimizer = optim(model.vars())
         self.lr_sched= lr_sched
         self.dataloaders = dataloaders # A dictionary of dataloaders
@@ -60,9 +64,8 @@ class Trainer(object,metaclass=Named):
         for self.epoch in tqdm(range(start_epoch, start_epoch + num_epochs),desc='train'):
             for i, minibatch in enumerate(self.dataloaders['train']):
                 step = i + self.epoch*steps_per_epoch
-                a, b = self.step(self.epoch+i/steps_per_epoch,minibatch) 
-                if b == 1:
-                    print(f"\n epoch {self.epoch} step {step}, skip nan, loss = {round(a.tolist(),3)}")
+                loss_val = self.step(self.epoch+i/steps_per_epoch,minibatch) 
+                # print(f"\n epoch {self.epoch} step {step}, loss = {round(loss_val.tolist(),3)}\n")
                 with self.logger as do_log:
                     if do_log: self.logStuff(step, minibatch)
         self.epoch+=1
@@ -70,10 +73,12 @@ class Trainer(object,metaclass=Named):
 
     def step(self, epoch, minibatch):
         grad_val, loss_val = self.gradvals(minibatch)
-        if jnp.isnan(grad_val[1]).any(): 
-            return loss_val[0], 1
+        # if jnp.isnan(grad_val[1]).any(): 
+        #     return loss_val[0], 1
+        # Clip the gradients according to global max norm.
+        grad_val = jeoptim.clip_grads(grad_val, self.max_grad_norm)
         self.optimizer(self.lr_sched(epoch), grad_val)
-        return loss_val[0], 0
+        return loss_val[0] 
 
     def logStuff(self, step, minibatch=None):
         metrics = {}
@@ -137,3 +142,11 @@ class Trainer(object,metaclass=Named):
     # def save_checkpoint(self):
     #     return self.logger.save_object(self.ckpt,suffix=f'checkpoints/c{self.epoch}.state')
 
+# def safe_clip_grads(grad_tree, max_norm):
+#     """Clip gradients stored as a pytree of arrays to maximum norm `max_norm`."""
+#     norm = jeoptim.l2_norm(grad_tree)
+#     eps = 1e-7
+#     normalize = lambda g: jnp.where(norm < max_norm, g, g * max_norm / (norm + eps))
+#     return tree_map(normalize, grad_tree)
+# jax.config.update('jax_debug_nans', True)
+# safe_clip_grads(jnp.array([0]), 1)
