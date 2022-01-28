@@ -674,7 +674,7 @@ class Dimensionless(object):
         if expand:
             # Expand the scalar set by considering functions of the scalars 
             x_dl = jnp.concatenate(
-                [x_dl, jnp.sqrt(jnp.abs(x_dl))], 
+                [x_dl, jnp.sqrt(x_dl[...,[0,1,2,3,4,5,6,7,8,11,13]])], 
                 axis=-1
             )
         ## Broadcasting: (n, d) & (2, d) => (n, 2, d) => (n, 2)
