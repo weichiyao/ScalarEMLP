@@ -18,13 +18,13 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
                     'info': logging.INFO,'debug': logging.DEBUG}
 
 def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021,aug=False,
-                bs=500,lr=5e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
+                bs=500,lr=5e-3,max_grad_norm=0.5,device='cuda',split={'train':500,'val':.1,'test':.1},
                 data_config={'chunk_len':5,'dt':0.2,'integration_time':30,'regen':False},
                 transformer_config={
                     'method':'rbf', 'dimensionless':False, 'n_rad':50, 
                     'n_quantiles':1000, 'transform_distribution':'uniform'
                 },
-                net_config={'n_layers':3,'n_hidden':100,'div':1},log_level='warn',
+                net_config={'n_layers':3,'n_hidden':100},log_level='warn',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},}, 
                 save=False,):
 
@@ -55,7 +55,9 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
     opt_constr = objax.optimizer.Adam
     # lr_sched = lambda e: lr#*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
     lr_sched = lambda e: lr if e < 300 else (lr*0.5 if e < 1200 else lr*0.2)
-    return IntegratedODETrainer(model,dataloaders,opt_constr,lr_sched,**trainer_config)
+    return IntegratedODETrainer(
+        model,dataloaders,opt_constr,lr_sched,max_grad_norm,**trainer_config
+    )
 
 if __name__ == "__main__":
     Trial = odeScalars_trial(makeTrainerScalars)
