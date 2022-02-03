@@ -50,7 +50,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
     dataloaders['Train'] = dataloaders['train']
     opt_constr = objax.optimizer.Adam
     # lr_sched = lambda e: lr#*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
-    lr_sched = lambda e: lr if (e < 200) else (lr*0.4 if e < 1000 else (lr*0.1))   
+    lr_sched = lambda e: lr if (e < 100) else (lr*0.5 if e < 200 else (lr*0.1))   
     return IntegratedDynamicsTrainer(
         model,dataloaders,opt_constr,lr_sched,max_grad_norm,**trainer_config
     )
