@@ -73,8 +73,8 @@ class Trainer(object,metaclass=Named):
 
     def step(self, epoch, minibatch):
         grad_val, loss_val = self.gradvals(minibatch)
-        # if jnp.isnan(grad_val[1]).any(): 
-        #     return loss_val[0], 1
+        if jnp.isnan(grad_val[1]).any(): 
+            return loss_val[0]
         # Clip the gradients according to global max norm.
         grad_val = jeoptim.clip_grads(grad_val, self.max_grad_norm)
         self.optimizer(self.lr_sched(epoch), grad_val)
