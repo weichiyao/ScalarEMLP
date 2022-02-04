@@ -690,7 +690,7 @@ class Dimensionless(object):
         if expand:
             # Expand the scalar set by considering functions of the scalars 
             x_dl = jnp.concatenate(
-                [x_dl, jnp.sqrt(x_dl[...,[0,1,2,3,4,5,6,7,8,11,13]])], 
+                [x_dl, jnp.sqrt(x_dl[...,[0,1,2,3,4,5,6,7,8,9,12,13,14,16]])], 
                 axis=-1
             )
         ## Broadcasting: (n, d) & (2, d) => (n, 2, d) => (n, 2)
@@ -1023,7 +1023,7 @@ class ScalarTransformer(object):
         else:
             xxsqrt = jnp.sqrt(xx[:,self.idx_sqrt]) # (n, 4)
             ggsqrt = jnp.sqrt(gg) # (n, 1)
-            scalars = jnp.concatenate(mkl, gg, gx, xx, ggsqrt, xxsqrt, 1/mkl, 1/ggsqrt) # (n, 33)
+            scalars = jnp.concatenate(mkl, gg, gx, xx, ggsqrt, xxsqrt, 1/mkl) # (n, 32)
         return scalars  
 
     def __call__(self, xs, xps):
