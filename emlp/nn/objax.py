@@ -789,7 +789,7 @@ class ScalarTransformer(object):
 
         self.dimensionless_operator = lambda x: (x, jnp.array([1,1])) 
         self.scaling_standardization = jnp.array([[0,0],[1,1]])
-        if dimensionless:
+        if self.dimensionless:
             # Create dimensionless features 
             self.dimensionless_operator = Dimensionless() 
             scalars, scaling = self.dimensionless_operator(scalars)
