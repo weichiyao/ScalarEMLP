@@ -463,7 +463,7 @@ class InvarianceLayer_objax(ScalarMLP):
     
     def H(self, x, xp):  
         scalars, scaling = self.transformer(x,xp)  
-        out = scaling[:,0] * self.mlp1(scalars) + scaling[:,1] * self.mlp2(scalars)
+        out = scaling[...,0] * self.mlp1(scalars) + scaling[...,1] * self.mlp2(scalars)
         return out.sum()  
     
     def __call__(self, x, xp, training = True):
@@ -596,16 +596,29 @@ class Dimensionless(object):
         self.h[0] = -self.h[0]
         self.h[3] = -self.h[3]
         self.h[4] = -self.h[4]
+
+        h0_new = np.concatenate([[0], self.h[0][:-1]])
+        h0_new[4] = 0
+        h0_new[2] = -1
+
+        h3_new = np.concatenate([[0], self.h[3][:-1]])
+        h3_new[7] = 0
+        h3_new[6] = -1
+
+        h4_new = np.concatenate([[0], self.h[4][:-1]]) 
+
+        
+        
         self.h[5] = -self.h[5]
         assert self.h[5][7] == 3
         assert self.h[5][8] == -1 
         self.h[5][7] = 0
         self.h[5][8] = 0 
-        h_new = np.concatenate([[0], self.h[5][:-1]])
+        h5_new = np.concatenate([[0], self.h[5][:-1]])
         self.h[5][6] = -1 
         self.h[5][11] = 2 
-        h_new[6] = -1
-        h_new[15] = 2
+        h5_new[6] = -1
+        h5_new[15] = 2
         assert self.h[10][7] == -1 
         assert self.h[10][13] == 1 
         assert self.h[11][7] == -1 
@@ -638,13 +651,16 @@ class Dimensionless(object):
         self.h[15][18] = 2
         self.h[17][20] = 2
 
-        keepidx = [0,1,2,3,4,5,6,7,8,10,11,15,16,17] 
+        keepidx = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17] 
         h_ad = np.zeros((len(keepidx),self.h.shape[1]))
         for i in range(len(keepidx)):
             h_ad[i] = self.h[keepidx[i]] 
-        h_ad[6] = h_new 
-        h_ad[7] = -self.h[1] 
-        h_ad[8] = -self.h[2]    
+        h_ad[6] = h0_new 
+        h_ad[7] = h3_new
+        h_ad[8] = h4_new
+        h_ad[9] = h5_new 
+        h_ad[12] = -self.h[1] 
+        h_ad[13] = -self.h[2]    
 
         self.h = h_ad
         self.nh = np.zeros((2,self.h.shape[1]))
@@ -997,14 +1013,17 @@ class ScalarTransformer(object):
         xx = jnp.sum(
             x[:,self.idx[:,0],:] * x[:,self.idx[:,1],:], 
             axis=-1
-        )
-        ## take square root of p_1^\top p_1, p_2^\top p_2, q_1^\top q_1, (q_2-q_1)^\top (q_2-q_1)
-        xx = xx.at[:,self.idx_sqrt].set(jnp.sqrt(xx[:,self.idx_sqrt]))
-        gx = jnp.einsum("...j,...ij", g, x[:,self.idx_map])
-        gg = jnp.sqrt(jnp.sum(g*g, axis = -1, keepdims=True))
-
-        ## all the current scalars we have 
-        scalars = jnp.concatenate([mkl, gg, gx, xx], axis = -1) # (n, 21)
+        ) # (n, 10)
+        gx = jnp.einsum("...j,...ij", g, x[:,self.idx_map]) # (n, 4)
+        gg = jnp.sum(g*g, axis = -1, keepdims=True) # (n, 1)
+        if self.dimensionless:
+            xx = xx.at[:,self.idx_sqrt].set(jnp.sqrt(xx[:,self.idx_sqrt])) 
+            ## all the current scalars we have 
+            scalars = jnp.concatenate([mkl, jnp.sqrt(gg), gx, xx], axis = -1) # (n, 21)
+        else:
+            xxsqrt = jnp.sqrt(xx[:,self.idx_sqrt]) # (n, 4)
+            ggsqrt = jnp.sqrt(gg) # (n, 1)
+            scalars = jnp.concatenate(mkl, gg, gx, xx, ggsqrt, xxsqrt, 1/mkl, 1/ggsqrt) # (n, 33)
         return scalars  
 
     def __call__(self, xs, xps):
