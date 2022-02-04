@@ -778,7 +778,8 @@ class ScalarTransformer(object):
         zs, zps = jnp.array(zs), jnp.array(zps)
         # Create mapping idex for inner product scalars computation
         self._create_index()
-
+        
+        self.dimensionless = dimensionless
         # Create inner product scalars
         scalars = self._compute_scalars(
             zs, 
@@ -800,7 +801,6 @@ class ScalarTransformer(object):
             
 
         self.method = method
-        self.dimensionless = dimensionless
         self.n_rad = n_rad
         self.n_quantiles = n_quantiles
         self.transform_distribution = transform_distribution
