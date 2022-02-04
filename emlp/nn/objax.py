@@ -1023,7 +1023,7 @@ class ScalarTransformer(object):
         else:
             xxsqrt = jnp.sqrt(xx[:,self.idx_sqrt]) # (n, 4)
             ggsqrt = jnp.sqrt(gg) # (n, 1)
-            scalars = jnp.concatenate(mkl, gg, gx, xx, ggsqrt, xxsqrt, 1/mkl) # (n, 32)
+            scalars = jnp.concatenate([mkl, gg, gx, xx, ggsqrt, xxsqrt, 1/mkl], axis=-1) # (n, 32)
         return scalars  
 
     def __call__(self, xs, xps):
