@@ -473,8 +473,9 @@ class InvarianceLayer_objax(ScalarMLP):
 @export
 class Dimensionless(object):
     def __init__(self):
-        self.create_mapping()
-        self.adjust_mapping()
+        # self.create_mapping()
+        # self.adjust_mapping()
+        self.create_mapping_new()
         self.h = jnp.array(self.h)
         self.nh = jnp.array(self.nh)
 
@@ -577,7 +578,120 @@ class Dimensionless(object):
         v[:n] = DD / np.diag(JJ)
         vv = (TT @ v).astype(int) 
         return vv, us
-
+    
+    def create_mapping_new(self):
+        self.nh = np.zeros((2,21))
+        self.nh[0][2] = 1
+        self.nh[1][3] = 1
+        self.nh[0][4] = 2
+        self.nh[1][5] = 2
+        
+        self.h = np.zeros((,21))
+        # m1 / m2
+        self.h[0][0] = 1 # m1
+        self.h[0][1] = -1 # 1/m2
+        # m2 / m1
+        self.h[1][0] = -1 # 1/m1
+        self.h[1][1] = 1 # m2
+        # k1 / k2
+        self.h[2][2] = 1 # k1
+        self.h[2][3] = -1 # 1/k2
+        # k2 / k1
+        self.h[3][2] = -1 # 1/k1
+        self.h[3][3] = 1 # k2
+        # l1 / l2
+        self.h[4][4] = 1 # l1
+        self.h[4][5] = -1 # 1/l2
+        # l2 / l1
+        self.h[5][4] = -1 # 1/l1
+        self.h[5][5] = 1 # l2
+        
+        # m1 |g| / k1 / l1
+        self.h[6][0] = 1 # m1
+        self.h[6][6] = 1 # |g|
+        self.h[6][2] = -1 # 1/k1
+        self.h[6][4] = -1 # 1/l1
+        # m2 |g| / k2 / l2
+        self.h[7][1] = 1 # m2
+        self.h[7][6] = 1 # |g|
+        self.h[7][3] = -1 # 1/k2
+        self.h[7][5] = -1 # 1/l2
+        
+        # inv m1 |g| / k1 / l1
+        self.h[8] = -self.h[6][:] 
+        # inv m2 |g| / k2 / l2
+        self.h[9] = -self.h[7][:]
+        
+        # gTp1 / (|g||p1|)
+        self.h[10][7] = 1 # gTp1
+        self.h[10][6] = -1 # 1/|g|
+        self.h[10][11] = -1 # 1/|p1|
+        # gTp2 / (|g||p2|)
+        self.h[11][8] = 1 # gTp2
+        self.h[11][6] = -1 # 1/|g|
+        self.h[11][15] = -1 # 1/|p2|
+        # gTq1 / (|g||q1|)
+        self.h[12][9] = 1 # gTq1 
+        self.h[12][6] = -1 # 1/|g|
+        self.h[12][18] = -1 # 1/|q1|
+        # gTq2 / (|g||q2-q1|)
+        self.h[13][10] = 1 # gT(q2-q1) 
+        self.h[13][6] = -1 # 1/|g|
+        self.h[13][20] = -1 # 1/|q2-q1|
+        
+        # p1Tp2 / (|p1||p2|)
+        self.h[14][12] = 1 # p1Tp2
+        self.h[14][11] = -1 # 1/|p1|
+        self.h[14][15] = -1 # 1/|p2|
+        # p1Tq1 / (|p1||q1|)
+        self.h[15][13] = 1 # p1Tq1
+        self.h[15][11] = -1 # 1/|p1|
+        self.h[15][18] = -1 # 1/|q1|
+        # p1T(q2-q1) / (|p1||q2-q1|)
+        self.h[16][14] = 1 # p1T(q2-q1)
+        self.h[16][11] = -1 # 1/|p1|
+        self.h[16][20] = -1 # 1/|q2-q1|
+        # p2Tq1 / (|p2||q1|)
+        self.h[17][16] = 1 # p2Tq1 
+        self.h[17][15] = -1 # 1/|p2|
+        self.h[17][18] = -1 # 1/|q1|
+        # p2T(q2-q1) / (|p2||q2-q1|)
+        self.h[18][17] = 1 # p2T(q2-q1) 
+        self.h[18][15] = -1 # 1/|p2|
+        self.h[18][20] = -1 # 1/|q2-q1|
+        # q1T(q2-q1) / (|q1||q2-q1|)
+        self.h[19][19] = 1 # q1T(q2-q1)
+        self.h[19][18] = -1 # 1/|q1|
+        self.h[19][20] = -1 # 1/|q2-q1|
+        
+        # |q1|/l1
+        self.h[20][18] = 1 # |q1|
+        self.h[20][4] = -1 # 1/l1
+        # |q2-q1|/l2
+        self.h[21][20] = 1 # |q2-q1|
+        self.h[21][5] = -1 # 1/l2
+        
+        # |p1|/(l1 sqrt(m1k1))
+        self.h[22][11] = 1 # |p1|
+        self.h[22][4] = -1 # 1/|l1|
+        self.h[22][0] = -1/2 # 1/sqrt(m1)
+        self.h[22][2] = -1/2 # 1/sqrt(k1)
+        # |p2|/(l2 sqrt(m2k2))
+        self.h[23][15] = 1 # |p2|
+        self.h[23][5] = -1 # 1/|l2|
+        self.h[23][1] = -1/2 # 1/sqrt(m2)
+        self.h[23][3] = -1/2 # 1/sqrt(k2)
+        
+        self.h[24] = self.h[6] * 2
+        self.h[25] = self.h[7] * 2
+        self.h[26] = self.h[8] * 2
+        self.h[27] = self.h[9] * 2
+        
+        self.h[28] = self.h[20] * 2
+        self.h[29] = self.h[21] * 2
+        self.h[30] = self.h[22] * 2
+        self.h[31] = self.h[23] * 2
+        
     def create_mapping(self): 
         """
         nh: final scaling matrix (2, 21)
@@ -607,8 +721,6 @@ class Dimensionless(object):
 
         h4_new = np.concatenate([[0], self.h[4][:-1]]) 
 
-        
-        
         self.h[5] = -self.h[5]
         assert self.h[5][7] == 3
         assert self.h[5][8] == -1 
@@ -661,7 +773,13 @@ class Dimensionless(object):
         h_ad[9] = h5_new 
         h_ad[12] = -self.h[1] 
         h_ad[13] = -self.h[2]    
-
+        
+        idx_sqrt = [0,1,2,3,4,5,6,7,8,9,12,13,14,16]
+        h_ad = np.concatenate(
+            [h_ad, h_ad[idx_sqrt]/2], 
+            axis=0
+        )
+            
         self.h = h_ad
         self.nh = np.zeros((2,self.h.shape[1]))
         self.nh[0][2] = 1
@@ -677,7 +795,7 @@ class Dimensionless(object):
     #     """x (d,) and h (2,d) gives output (1,)"""
     #     return jnp.sum(jnp.prod(x**params, axis=-1), keepdims=True)
 
-    def __call__(self, x, expand=True):
+    def __call__(self, x):
         """
         Input 
         - x: scalars with dimensions (n, d)
@@ -687,12 +805,7 @@ class Dimensionless(object):
         """
         ## Broadcasting: (n, d) & (m, d) => (n, m, d) => (n, m)
         x_dl = jit(vmap(jit(partial(self.map_m_func, self.h))))(x)
-        if expand:
-            # Expand the scalar set by considering functions of the scalars 
-            x_dl = jnp.concatenate(
-                [x_dl, jnp.sqrt(x_dl[...,[0,1,2,3,4,5,6,7,8,9,12,13,14,16]])], 
-                axis=-1
-            )
+        
         ## Broadcasting: (n, d) & (2, d) => (n, 2, d) => (n, 2)
         x_sc = jit(vmap(jit(partial(self.map_m_func, self.nh))))(x) 
         return x_dl, x_sc 
