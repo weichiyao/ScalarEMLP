@@ -580,13 +580,13 @@ class Dimensionless(object):
         return vv, us
     
     def create_mapping_new(self):
-        self.nh = np.zeros((2,21))
+        self.nh = np.zeros((2,21),dtype=np.float32)
         self.nh[0][2] = 1
         self.nh[1][3] = 1
         self.nh[0][4] = 2
         self.nh[1][5] = 2
         
-        self.h = np.zeros((,21))
+        self.h = np.zeros((31,21),dtype=np.float32)
         # m1 / m2
         self.h[0][0] = 1 # m1
         self.h[0][1] = -1 # 1/m2
