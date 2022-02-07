@@ -215,8 +215,9 @@ class DoubleSpringPendulum(HamiltonianDataset):
         return (ke + pe).sum() 
        
     def sample_parameters(self,bs):
-        g = np.random.uniform(-1, 1, size=(bs, 3))    
-        g = g/np.linalg.norm(g,axis=-1,keepdims=True) # normalize 
+        g = np.random.normal(size=(bs, 3))    
+        ghat = g/np.linalg.norm(g, axis=-1, keepdims=True) # normalize 
+        g = ghat * np.random.uniform(1,2,(bs,))[:,None]
         m1 = np.random.uniform(1,2,(bs,))
         m2 = np.random.uniform(1,2,(bs,))
         k1 = np.random.uniform(1,2,(bs,))
