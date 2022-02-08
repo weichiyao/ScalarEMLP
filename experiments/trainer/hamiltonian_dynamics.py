@@ -128,7 +128,7 @@ class HamiltonianDataset(Dataset):
         zps = self.sample_parameters(n_systems, rescaleKG)
         while n_gen < n_systems: 
             ## generate positions and velocities 
-            z0s = self.sample_initial_conditions(bs, rescaleKG) 
+            z0s = self.sample_initial_conditions(bs, rescaleKG[n_gen:n_gen+bs]) 
             ts = jnp.arange(0, integration_time, dt) 
             new_zs = BHamiltonianFlow(
                 self.H, 
