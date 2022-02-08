@@ -586,7 +586,7 @@ class Dimensionless(object):
         self.nh[0][4] = 2
         self.nh[1][5] = 2
         
-        self.h = np.zeros((31,21),dtype=np.float32)
+        self.h = np.zeros((32,21),dtype=np.float32)
         # m1 / m2
         self.h[0][0] = 1 # m1
         self.h[0][1] = -1 # 1/m2
