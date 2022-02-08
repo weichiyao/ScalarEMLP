@@ -272,10 +272,27 @@ class IntegratedDynamicsTrainer(Regressor):
     
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
-        (z0, zps, ts), true_zs = minibatch
+        (z0, zps, ts), true_zs = minibatch 
+        m1,m2 = zps[...,3], zps[...,4]
+        k1,k2 = zps[...,5], zps[...,6]
+        l1,l2 = zps[...,7], zps[...,8] 
         # pred_zs = BHamiltonianFlow(self.model,z0,ts[0])
-        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],zps)
-        return jnp.mean((pred_zs - true_zs)**2)
+        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],zps) # (n,T,12)
+        true_q,true_p = unpack(true_zs)
+        true_p1,true_p2 = unpack(true_p)
+        true_q1,true_q2 = unpack(true_q)
+        
+        pred_q,pred_p = unpack(pred_zs)
+        pred_p1,pred_p2 = unpack(pred_p)
+        pred_q1,pred_q2 = unpack(pred_q)
+        
+        loss_dl = jnp.mean(
+            jnp.linalg.norm(true_p1-pred_p1,axis=-1) / l1 / jnp.sqrt(m1*k1)
+            + jnp.linalg.norm(true_p2-pred_p2,axis=-1) / l2 / jnp.sqrt(m2*k2)
+            + jnp.linalg.norm(true_q1-pred_q1,axis=-1) / l1
+            + jnp.linalg.norm(true_q2-pred_q2,axis=-1) / l2
+        )
+        return loss_dl # jnp.mean((pred_zs - true_zs)**2)
 
     def metrics(self, loader):
         mse = lambda mb: np.asarray(self.loss(mb))
