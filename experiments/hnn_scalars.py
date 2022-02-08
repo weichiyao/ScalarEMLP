@@ -19,6 +19,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
 
 def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021, 
                 bs=500,lr=5e-3,max_grad_norm=0.5,device='cuda',split={'train':-1,'val':100,'test':500},
+                recaleKG_lower=1, rescaleKG_upper=1,
                 data_config={'chunk_len':10,'dt':0.2,'integration_time':6,'regen':False},
                 transformer_config={
                     'method':'none', 'dimensionless':True, 'n_rad':50, 
@@ -30,8 +31,11 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
     logging.getLogger().setLevel(levels[log_level])
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
-        base_ds = dataset(n_systems=ndata, **data_config)
+        rescaleKG = np.random.uniform(rescaleKG_lower, rescaleKG_upper, size=(split['test'],))
+        base_ds = dataset(n_systems=ndata, **data_config, rescaleKG=None)
         datasets = split_dataset(base_ds,splits=split)
+        test_ds = dataset(n_systems=split['test'], **data_config, rescaleKG=rescaleKG)
+        datasets['test'] = test_ds
     
         zs_train = base_ds.Zs[datasets['train']._ids].reshape(-1,4,3)
         zps_train = np.repeat(
