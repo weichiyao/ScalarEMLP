@@ -130,17 +130,17 @@ class Trainer(object,metaclass=Named):
     #     self.optimizer.load_state_dict(state['optim_state'])
     #     self.logger.load_state_dict(state['logger_state'])
 
-    # def load_checkpoint(self,path=None):
-    #     """ Loads the checkpoint from path, if None gets the highest epoch checkpoint"""
-    #     if not path:
-    #         chkpts = glob.glob(os.path.join(self.logger.log_dirr,'checkpoints/c*.state'))
-    #         path = natsorted(chkpts)[-1] # get most recent checkpoint
-    #         print(f"loading checkpoint {path}")
-    #     with open(path,'rb') as f:
-    #         self.load_state_dict(dill.load(f))
+    def load_checkpoint(self,path=None):
+        """ Loads the checkpoint from path, if None gets the highest epoch checkpoint"""
+        if not path:
+            chkpts = glob.glob(os.path.join(self.logger.log_dirr,'checkpoints/c*.state'))
+            path = natsorted(chkpts)[-1] # get most recent checkpoint
+            print(f"loading checkpoint {path}")
+        with open(path,'rb') as f:
+            self.load_state_dict(dill.load(f))
 
-    # def save_checkpoint(self):
-    #     return self.logger.save_object(self.ckpt,suffix=f'checkpoints/c{self.epoch}.state')
+    def save_checkpoint(self):
+        return self.logger.save_object(self.ckpt,suffix=f'checkpoints/c{self.epoch}.state')
 
 # def safe_clip_grads(grad_tree, max_norm):
 #     """Clip gradients stored as a pytree of arrays to maximum norm `max_norm`."""
