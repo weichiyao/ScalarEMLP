@@ -218,6 +218,7 @@ class DoubleSpringPendulum(HamiltonianDataset):
     def sample_parameters(self,bs,rescaleKG=None):
         if rescaleKG is None:
             rescaleKG = np.ones((bs,))
+        assert rescaleKG.shape[0] == bs
         g = np.random.normal(size=(bs, 3))    
         ghat = g/np.linalg.norm(g, axis=-1, keepdims=True) # normalize 
         g = ghat * np.random.uniform(1,2,(bs,))[:,None]
@@ -240,12 +241,13 @@ class DoubleSpringPendulum(HamiltonianDataset):
     def sample_initial_conditions(self,bs,rescaleKG=None):
         if rescaleKG is None:
             rescaleKG = np.ones((bs,))
+        assert rescaleKG.shape[0] == bs
         x1 = np.array([0,0,-1.5]) +.2*np.random.randn(bs,3)
         x2 = np.array([0,0,-3.]) +.2*np.random.randn(bs,3)
         p = .4*np.random.randn(bs,6)
         
         # recale all the mass-related
-        p *= rescaleKG
+        p *= rescaleKG[:,None]
         
         z0 = np.concatenate([x1,x2,p],axis=-1) # (bs, 12) 
         return z0 
