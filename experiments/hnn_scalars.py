@@ -19,7 +19,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
 
 def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021, 
                 bs=500,lr=5e-3,max_grad_norm=0.5,device='cuda',split={'train':-1,'val':100,'test':500},
-                recaleKG_lower=1, rescaleKG_upper=1,
+                rescaleKG_lower=1, rescaleKG_upper=1,
                 data_config={'chunk_len':10,'dt':0.2,'integration_time':6,'regen':False},
                 transformer_config={
                     'method':'none', 'dimensionless':True, 'n_rad':50, 
