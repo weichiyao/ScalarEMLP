@@ -286,12 +286,18 @@ class IntegratedDynamicsTrainer(Regressor):
         pred_p1,pred_p2 = unpack(pred_p)
         pred_q1,pred_q2 = unpack(pred_q)
         
-        loss_dl = jnp.mean(
-            jnp.linalg.norm(true_p1-pred_p1,axis=-1) / (l1*jnp.sqrt(m1*k1))[:,None]
-            + jnp.linalg.norm(true_p2-pred_p2,axis=-1) / (l2*jnp.sqrt(m2*k2))[:,None]
-            + jnp.linalg.norm(true_q1-pred_q1,axis=-1) / l1[:,None]
-            + jnp.linalg.norm(true_q2-pred_q2,axis=-1) / l2[:,None]
-        )
+        pred_q1 = pred_q1 / (jnp.linalg.norm(pred_q1,axis=-1) )[:,:,None]
+        pred_q2 = pred_q2 / (jnp.linalg.norm(pred_q2,axis=-1) )[:,:,None]
+        pred_p1 = pred_p1 / (jnp.linalg.norm(pred_p1,axis=-1) )[:,:,None]
+        pred_p2 = pred_p2 / (jnp.linalg.norm(pred_p2,axis=-1) )[:,:,None]
+
+        true_q1 = true_q1 / (jnp.linalg.norm(true_q1,axis=-1) )[:,:,None]
+        true_q2 = true_q2 / (jnp.linalg.norm(true_q2,axis=-1) )[:,:,None]
+        true_p1 = true_p1 / (jnp.linalg.norm(true_p1,axis=-1) )[:,:,None]
+        true_p2 = true_p2 / (jnp.linalg.norm(true_p2,axis=-1) )[:,:,None]
+
+        loss_dl = jnp.mean((true_q1-pred_q1)**2 + (true_q2-pred_q2)**2 + (true_p1-pred_p1)**2 +(true_p2-pred_p2)**2)
+         
         return loss_dl # jnp.mean((pred_zs - true_zs)**2)
 
     def metrics(self, loader):
