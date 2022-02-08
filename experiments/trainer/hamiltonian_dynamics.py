@@ -600,7 +600,7 @@ class hnnScalars_trial(object):
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_{cfg['transformer_config']['dimensionless']}_{i}.t")
+            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{i}.t")
         except Exception as e:
             if self.strict: raise
             outcome = e
