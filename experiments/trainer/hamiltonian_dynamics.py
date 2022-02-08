@@ -287,10 +287,10 @@ class IntegratedDynamicsTrainer(Regressor):
         pred_q1,pred_q2 = unpack(pred_q)
         
         loss_dl = jnp.mean(
-            jnp.linalg.norm(true_p1-pred_p1,axis=-1) / l1 / jnp.sqrt(m1*k1)
-            + jnp.linalg.norm(true_p2-pred_p2,axis=-1) / l2 / jnp.sqrt(m2*k2)
-            + jnp.linalg.norm(true_q1-pred_q1,axis=-1) / l1
-            + jnp.linalg.norm(true_q2-pred_q2,axis=-1) / l2
+            jnp.linalg.norm(true_p1-pred_p1,axis=-1) / (l1*jnp.sqrt(m1*k1))[:,None]
+            + jnp.linalg.norm(true_p2-pred_p2,axis=-1) / (l2*jnp.sqrt(m2*k2))[:,None]
+            + jnp.linalg.norm(true_q1-pred_q1,axis=-1) / l1[:,None]
+            + jnp.linalg.norm(true_q2-pred_q2,axis=-1) / l2[:,None]
         )
         return loss_dl # jnp.mean((pred_zs - true_zs)**2)
 
