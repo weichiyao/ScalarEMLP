@@ -899,17 +899,17 @@ class ScalarTransformer(object):
             zps[:,:3], 
             zps[:,3:]
         )   
-        print(f"Scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 2)}")
-        print(f"Scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 2)}")
+        print(f"Scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
+        print(f"Scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
         self.dimensionless_operator = lambda x: (x, jnp.array([1,1])) 
         self.scaling_standardization = jnp.array([[0,0],[1,1]])
         if self.dimensionless:
             # Create dimensionless features 
             self.dimensionless_operator = Dimensionless() 
             scalars, scaling = self.dimensionless_operator(scalars)
-            print(f"Dimensionless scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 2)}")
-            print(f"Dimensionless scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 2)}")
-            print(f"Dimensionless scaling max={jnp.round(jnp.max(scaling), 2)} and min={jnp.round(jnp.min(scaling), 2)}")
+            print(f"Dimensionless scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
+            print(f"Dimensionless scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
+            print(f"Dimensionless scaling max={jnp.round(jnp.max(scaling), 2)} and min={jnp.round(jnp.min(scaling), 4)}")
             self.scaling_standardization = jnp.stack(
                 [jnp.min(scaling, axis=0), jnp.max(scaling, axis=0) - jnp.min(scaling, axis=0)],
                 axis = 0
