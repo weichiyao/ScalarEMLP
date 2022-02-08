@@ -34,6 +34,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
         rescaleKG = np.random.uniform(rescaleKG_lower, rescaleKG_upper, size=(split['test'],))
         base_ds = dataset(n_systems=ndata, **data_config, rescaleKG=None)
         datasets = split_dataset(base_ds,splits=split)
+        # scale mass-related inputs in the test set
         test_ds = dataset(n_systems=split['test'], **data_config, rescaleKG=rescaleKG)
         datasets['test'] = test_ds
     
