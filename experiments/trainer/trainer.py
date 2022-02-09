@@ -33,7 +33,7 @@ class Trainer(object,metaclass=Named):
         #self.model = objax.Jit(lambda x, training: model(x,training=training),model.vars(),static_argnums=(1,))
         #self.model = objax.Jit(model,static_argnums=(1,))
         self.max_grad_norm = max_grad_norm
-        self.optimizer = optim(model.vars())
+        self.optimizer = optim(self.model.vars())
         self.lr_sched= lr_sched
         self.dataloaders = dataloaders # A dictionary of dataloaders
         self.epoch = 0
@@ -112,7 +112,7 @@ class Trainer(object,metaclass=Named):
             num_total += mb_size
         if num_total==0: raise KeyError("dataloader is empty")
         return loss_totals/num_total
-
+    
     def state_dict(self):
         #TODO: handle saving and loading state
         state = {
@@ -124,23 +124,23 @@ class Trainer(object,metaclass=Named):
         }
         return state
 
-    # def load_state_dict(self,state):
-    #     self.epoch = state['epoch']
-    #     self.model.load_state_dict(state['model_state'])
-    #     self.optimizer.load_state_dict(state['optim_state'])
-    #     self.logger.load_state_dict(state['logger_state'])
+#     def load_state_dict(self,state):
+#         self.epoch = state['epoch']
+#         # self.model.load_state_dict(state['model_state'])
+#         # self.optimizer.load_state_dict(state['optim_state'])
+#         # self.logger.load_state_dict(state['logger_state'])
 
-    def load_checkpoint(self,path=None):
-        """ Loads the checkpoint from path, if None gets the highest epoch checkpoint"""
-        if not path:
-            chkpts = glob.glob(os.path.join(self.logger.log_dirr,'checkpoints/c*.state'))
-            path = natsorted(chkpts)[-1] # get most recent checkpoint
-            print(f"loading checkpoint {path}")
-        with open(path,'rb') as f:
-            self.load_state_dict(dill.load(f))
+#     def load_checkpoint(self,path=None):
+#         """ Loads the checkpoint from path, if None gets the highest epoch checkpoint"""
+#         if not path:
+#             chkpts = glob.glob(os.path.join(self.logger.log_dirr,'checkpoints/c*.state'))
+#             path = natsorted(chkpts)[-1] # get most recent checkpoint
+#             print(f"loading checkpoint {path}")
+#         with open(path,'rb') as f:
+#             self.load_state_dict(dill.load(f))
 
-    def save_checkpoint(self):
-        return self.logger.save_object(self.ckpt,suffix=f'checkpoints/c{self.epoch}.state')
+#     def save_checkpoint(self):
+#         return self.logger.save_object(self.ckpt,suffix=f'checkpoints/c{self.epoch}.state')
 
 # def safe_clip_grads(grad_tree, max_norm):
 #     """Clip gradients stored as a pytree of arrays to maximum norm `max_norm`."""
