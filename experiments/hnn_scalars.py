@@ -18,47 +18,66 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
 
 
 def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021, 
-                bs=500,lr=5e-3,max_grad_norm=0.5,device='cuda',split={'train':-1,'val':100,'test':500},
-                rescaleKG_lower=1, rescaleKG_upper=1,
-                data_config={'chunk_len':10,'dt':0.2,'integration_time':6,'regen':False},
-                transformer_config={
-                    'method':'none', 'dimensionless':True, 'n_rad':50, 
-                    'n_quantiles':200, 'transform_distribution':'uniform'
-                },
-                net_config={'n_layers':4,'n_hidden':200,'div':2}, log_level='info',
-                trainer_config={'log_dir':'/home','log_args':{'minPeriod':.02,'timeFrac':.75},},
-                save=False,trial=1):
-    logging.getLogger().setLevel(levels[log_level])
-    # Prep the datasets splits, model, and dataloaders
-    with FixedNumpySeed(seed),FixedPytorchSeed(seed):
-        rescaleKG = np.random.uniform(rescaleKG_lower, rescaleKG_upper, size=(split['test'],))
-        base_ds = dataset(n_systems=ndata, **data_config, rescaleKG=None)
-        datasets = split_dataset(base_ds,splits=split)
-        # scale mass-related inputs in the test set
-        test_ds = dataset(n_systems=split['test'], **data_config, rescaleKG=rescaleKG)
-        datasets['test'] = test_ds
-    
-        zs_train = base_ds.Zs[datasets['train']._ids].reshape(-1,4,3)
-        zps_train = np.repeat(
-            base_ds.ZPs[datasets['train']._ids], 
-            data_config['chunk_len'], 
-            axis=0
-        ) 
-        stransformer = ScalarTransformer(
-            zs = zs_train, 
-            zps = zps_train,   
-            **transformer_config
-        )
-    model = InvarianceLayer_objax(transformer=stransformer, **net_config)
-    dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
-                   num_workers=0,pin_memory=False)) for k,v in datasets.items()}
-    dataloaders['Train'] = dataloaders['train']
-    opt_constr = objax.optimizer.Adam
-    # lr_sched = lambda e: lr#*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
-    lr_sched = lambda e: lr if (e < 100) else (lr*0.5 if e < 200 else (lr*0.1))   
-    return IntegratedDynamicsTrainer(
-        model,dataloaders,opt_constr,lr_sched,max_grad_norm,**trainer_config
-    )
+                       bs=500,lr=5e-3,max_grad_norm=0.5,device='cuda',split={'train':-1,'val':100,'test':500},
+                       rescale_config={'fixed':5, 'rand_lower':1, 'rand_upper':5},
+                       data_config={'chunk_len':10,'dt':0.2,'integration_time':6,'regen':False},
+                       transformer_config={
+                           'method':'none', 'dimensionless':True, 'n_rad':50, 
+                           'n_quantiles':200, 'transform_distribution':'uniform'
+                       },
+                       net_config={'n_layers':4,'n_hidden':200,'div':2}, log_level='info',
+                       trainer_config={'log_dir':'/home','log_args':{'minPeriod':.02,'timeFrac':.75},},
+                       save=False,trial=1):
+          logging.getLogger().setLevel(levels[log_level])
+
+          # Prep the datasets splits, model, and dataloaders
+          # Generate the train and validation sets 
+          with FixedNumpySeed(seed),FixedPytorchSeed(seed):
+                base_ds = dataset(n_systems=ndata, **data_config, rescaleKG=None)
+                datasets = split_dataset(base_ds,splits=split)
+          
+          # Generate the original test sets 
+          with FixedNumpySeed(seed),FixedPytorchSeed(seed): 
+                test_ds0 = dataset(n_systems=split['test'], **data_config, rescaleKG=None)
+                datasets['test'] = test_ds0
+                
+                rescaleKG1 = np.random.uniform(
+                    rescale_config['fixed'], rescale_config['fixed'], size=(split['test'],)
+                )
+                rescaleKG2 = np.random.uniform(
+                    rescale_config['rand_lower'], rescale_config['rand_upper'], size=(split['test'],)
+                )
+          # Generate the additional test sets 
+          with FixedNumpySeed(seed),FixedPytorchSeed(seed):
+                # scale mass-related inputs in the test set by rescaleKG1
+                test_ds1 = dataset(n_systems=split['test'], **data_config, rescaleKG=rescaleKG1)
+                # scale mass-related inputs in the test set randomly by rescaleKG2 
+                test_ds2 = dataset(n_systems=split['test'], **data_config, rescaleKG=rescaleKG2)
+                datasets['test1'] = test_ds1
+                datasets['test2'] = test_ds2      
+          
+
+          zs_train = base_ds.Zs[datasets['train']._ids].reshape(-1,4,3)
+          ps_train = np.repeat(
+                base_ds.ZPs[datasets['train']._ids], 
+                data_config['chunk_len'], 
+                axis=0
+          ) 
+          stransformer = ScalarTransformer(
+                zs = zs_train, 
+                zps = zps_train,   
+                **transformer_config
+          )
+          model = InvarianceLayer_objax(transformer=stransformer, **net_config)
+          dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
+                         num_workers=0,pin_memory=False)) for k,v in datasets.items()}
+          dataloaders['Train'] = dataloaders['train']
+          opt_constr = objax.optimizer.Adam
+          # lr_sched = lambda e: lr#*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
+          lr_sched = lambda e: lr if (e < 100) else (lr*0.5 if e < 200 else (lr*0.1))   
+          return IntegratedDynamicsTrainer(
+                model,dataloaders,opt_constr,lr_sched,max_grad_norm,**trainer_config
+          )
 
 if __name__ == "__main__":
     Trial = hnnScalars_trial(makeTrainerScalars)
