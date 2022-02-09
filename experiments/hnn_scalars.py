@@ -59,7 +59,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
           
     # Create the transformer and the model 
     zs_train = base_ds.Zs[datasets['train']._ids].reshape(-1,4,3)
-    ps_train = np.repeat(
+    zps_train = np.repeat(
         base_ds.ZPs[datasets['train']._ids], 
         data_config['chunk_len'], 
         axis=0
