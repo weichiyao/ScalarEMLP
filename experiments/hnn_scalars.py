@@ -20,7 +20,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
 def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021, 
                        bs=500,lr=5e-3,max_grad_norm=0.5,device='cuda',split={'train':-1,'val':100,'test':500},
                        rescale_config={'fixed':5, 'rand_lower':1, 'rand_upper':5},
-                       data_config={'chunk_len':10,'dt':0.2,'integration_time':6,'regen':False},
+                       data_config={'chunk_len':10,'dt':0.2,'integration_time':6},
                        transformer_config={
                            'method':'none', 'dimensionless':True, 'n_rad':50, 
                            'n_quantiles':200, 'transform_distribution':'uniform'
@@ -33,12 +33,12 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
     # Prep the datasets splits, model, and dataloaders
     # Generate the train and validation sets 
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
-        base_ds = dataset(n_systems=ndata, **data_config, rescaleKG=None)
+        base_ds = dataset(n_systems=ndata, **data_config, rescaleKG=None, regen=False)
         datasets = split_dataset(base_ds,splits=split)
           
     # Generate the original test sets 
     with FixedNumpySeed(seed),FixedPytorchSeed(seed): 
-        test_ds0 = dataset(n_systems=split['test'], **data_config, rescaleKG=None)
+        test_ds0 = dataset(n_systems=split['test'], **data_config, rescaleKG=None, regen=True)
         datasets['test'] = test_ds0
                 
         rescaleKG1 = np.random.uniform(
@@ -51,9 +51,9 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
     # Generate the additional test sets 
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
         # scale mass-related inputs in the test set by rescaleKG1
-        test_ds1 = dataset(n_systems=split['test'], **data_config, rescaleKG=rescaleKG1)
+        test_ds1 = dataset(n_systems=split['test'], **data_config, rescaleKG=rescaleKG1, regen=True)
         # scale mass-related inputs in the test set randomly by rescaleKG2 
-        test_ds2 = dataset(n_systems=split['test'], **data_config, rescaleKG=rescaleKG2)
+        test_ds2 = dataset(n_systems=split['test'], **data_config, rescaleKG=rescaleKG2, regen=True)
         datasets['test1'] = test_ds1
         datasets['test2'] = test_ds2      
           
