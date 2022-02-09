@@ -58,15 +58,15 @@ def HamiltonianFlow(H,z0,T,zp):
         to rolled out trajectory at time points T.
         z0 shape (state_dim,) and T shape (t,) yields (t,state_dim) rollout."""
     dynamics = lambda z,t,zp: hamiltonian_dynamics(H,z,t,zp)
-    return odeint(dynamics, z0, T, zp, rtol=1e-4, atol=1e-4)#.transpose((1,0,2))
+    return odeint(dynamics, z0, T, zp, rtol=1e-7, atol=1e-7)#.transpose((1,0,2))
 
-def BHamiltonianFlow(H,z0,T,zp,tol=1e-4):
+def BHamiltonianFlow(H,z0,T,zp,tol=1e-7):
     """ Batched version of HamiltonianFlow, essentially equivalent to vmap(HamiltonianFlow),
         z0 of shape (bs,state_dim) and T of shape (t,) yields (bs,t,state_dim) rollouts """
     dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None,0)))
     return odeint(dynamics, z0, T, zp, rtol=tol).transpose((1,0,2))
 
-def BOdeFlow(dynamics,z0,T,zp,tol=1e-4):
+def BOdeFlow(dynamics,z0,T,zp,tol=1e-7):
     """ Batched integration of ODE dynamics into rollout trajectories.
         Given dynamics (state_dim->state_dim) and z0 of shape (bs,state_dim)
         and T of shape (t,) outputs trajectories (bs,t,state_dim) """
