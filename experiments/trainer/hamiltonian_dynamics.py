@@ -283,13 +283,17 @@ class IntegratedDynamicsTrainer(Regressor):
         return {"MSE": self.evalAverageMetrics(loader, mse)}
     
     def logStuff(self, step, minibatch=None):
-        loader = self.dataloaders['test']
-        metrics = np.exp(self.evalAverageMetrics(
-            loader, partial(log_rollout_error, loader.dataset, self.model)
-        ))
-        metrics = {'test_Rollout': metrics}
-        self.logger.add_scalars('metrics', metrics, step)
-        super().logStuff(step,minibatch)
+        # we could have more than one test sets
+        testname_all = [s for s in self.dataloaders.keys() if s not in ['val', 'train', 'Train']]
+        printname_all = [s+'_Rollout' for s in testname_all]
+        for i in range(len(testname_all)):
+            loader = self.dataloaders[testname_all[i]]
+            metrics = np.exp(self.evalAverageMetrics(
+                loader, partial(log_rollout_error, loader.dataset, self.model)
+            ))
+            metrics = {printname_all[i]: metrics} 
+            self.logger.add_scalars('metrics', metrics, step)
+            super().logStuff(step,minibatch)
 
 class IntegratedODETrainer(Regressor):
     """ A trainer for training the Neural ODEs. Feel free to use your own instead."""
