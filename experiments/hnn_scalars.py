@@ -47,6 +47,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
                 rescaleKG2 = np.random.uniform(
                     rescale_config['rand_lower'], rescale_config['rand_upper'], size=(split['test'],)
                 )
+          
           # Generate the additional test sets 
           with FixedNumpySeed(seed),FixedPytorchSeed(seed):
                 # scale mass-related inputs in the test set by rescaleKG1
@@ -56,7 +57,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
                 datasets['test1'] = test_ds1
                 datasets['test2'] = test_ds2      
           
-
+          # Create the transformer and the model 
           zs_train = base_ds.Zs[datasets['train']._ids].reshape(-1,4,3)
           ps_train = np.repeat(
                 base_ds.ZPs[datasets['train']._ids], 
@@ -67,13 +68,16 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
                 zs = zs_train, 
                 zps = zps_train,   
                 **transformer_config
-          )
+          ) 
           model = InvarianceLayer_objax(transformer=stransformer, **net_config)
+          
+          # Create data loaders
           dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
                          num_workers=0,pin_memory=False)) for k,v in datasets.items()}
           dataloaders['Train'] = dataloaders['train']
-          opt_constr = objax.optimizer.Adam
-          # lr_sched = lambda e: lr#*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
+          
+          # Trainer 
+          opt_constr = objax.optimizer.Adam 
           lr_sched = lambda e: lr if (e < 100) else (lr*0.5 if e < 200 else (lr*0.1))   
           return IntegratedDynamicsTrainer(
                 model,dataloaders,opt_constr,lr_sched,max_grad_norm,**trainer_config
@@ -82,6 +86,6 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
 if __name__ == "__main__":
     Trial = hnnScalars_trial(makeTrainerScalars)
     i = makeTrainerScalars.__kwdefaults__['trial']
-    cfg,outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__), i)
+    cfg, outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__), i)
     print(outcome)
 
