@@ -631,7 +631,7 @@ class hnnScalars_trial(object):
                  
             outcome = trainer.ckpt['outcome']
             # we could have more than one test sets
-            testname_all = [s for s in dataloaders.keys() if s not in ['val', 'train', 'Train']]
+            testname_all = [s for s in trainer.dataloaders.keys() if s not in ['val', 'train', 'Train']]
             for testname in testname_all:
                 trajectories = []
                 for mb in trainer.dataloaders[testname]:
