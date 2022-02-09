@@ -117,7 +117,7 @@ class HamiltonianDataset(Dataset):
     def integrate(self,z0s,zps,ts):
         return HamiltonianFlow(self.H_wrap(zps), z0s, ts) # HamiltonianFlow(self.H, z0s, ts)
     
-    def generate_trajectory_data(self, n_systems, dt, integration_time, rescaleKG=None, bs=100):
+    def generate_trajectory_data(self, n_systems, dt, integration_time, rescaleKG=None, bs=500):
         """ 
         Returns ts: (n_systems, traj_len) zs: (n_systems, traj_len, z_dim)
                 zps: (n_systems, 9) = (g, (m1,k1,l1), (m2,k2,l2))
