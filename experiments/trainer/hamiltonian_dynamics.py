@@ -293,7 +293,7 @@ class IntegratedDynamicsTrainer(Regressor):
             ))
             metrics = {printname_all[i]: metrics} 
             self.logger.add_scalars('metrics', metrics, step)
-            super().logStuff(step,minibatch)
+        super().logStuff(step,minibatch)
 
 class IntegratedODETrainer(Regressor):
     """ A trainer for training the Neural ODEs. Feel free to use your own instead."""
