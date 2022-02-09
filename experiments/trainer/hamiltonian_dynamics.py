@@ -630,10 +630,14 @@ class hnnScalars_trial(object):
                 pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
                  
             outcome = trainer.ckpt['outcome']
-            trajectories = []
-            for mb in trainer.dataloaders['test']:
-                trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),savefilename_prefix+"_traj.t")
+            # we could have more than one test sets
+            testname_all = [s for s in dataloaders.keys() if s not in ['val', 'train', 'Train']]
+            for testname in testname_all:
+                trajectories = []
+                for mb in trainer.dataloaders[testname]:
+                    trajectories.append(pred_and_gt(trainer.dataloaders[testname].dataset,trainer.model,mb))
+                torch.save(np.concatenate(trajectories), savefilename_prefix+"_traj_"+testname+".t")
+                
         except Exception as e:
             if self.strict: raise
             outcome = e
