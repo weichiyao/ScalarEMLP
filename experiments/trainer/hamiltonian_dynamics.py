@@ -14,7 +14,7 @@ from torch.utils.data import Dataset
 import numpy as np 
 from functools import partial
 from itertools import islice
-
+import pickle
 from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
 from emlp.reps import T,Scalar
 from .classifier import Regressor,Classifier
@@ -587,12 +587,17 @@ class odeScalars_trial(object):
             trainer = self.make_trainer(**cfg)
             trainer.logger.add_scalars('config',flatten_dict(cfg))
             trainer.train(cfg['num_epochs'])
-            if save: cfg['saved_at']=trainer.save_checkpoint()
+            # if save: cfg['saved_at']=trainer.save_checkpoint()
+            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_NODEs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{i}"
+            if save:
+                # Pickling
+                pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
+             
             outcome = trainer.ckpt['outcome']
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt_ode(trainer.dataloaders['test'].dataset,trainer.model,mb)) 
-            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_NODEs'}_{i}.t")
+            torch.save(np.concatenate(trajectories), savefilename_prefix+"_traj.t")
         except Exception as e:
             if self.strict: raise
             outcome = e
@@ -618,12 +623,17 @@ class hnnScalars_trial(object):
             trainer = self.make_trainer(**cfg)
             trainer.logger.add_scalars('config',flatten_dict(cfg))
             trainer.train(cfg['num_epochs'])
-            if save: cfg['saved_at']=trainer.save_checkpoint()
+            # if save: cfg['saved_at']=trainer.save_checkpoint()
+            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{i}"
+            if save:
+                # Pickling
+                pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
+                 
             outcome = trainer.ckpt['outcome']
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{i}.t")
+            torch.save(np.concatenate(trajectories),savefilename_prefix+"_traj.t")
         except Exception as e:
             if self.strict: raise
             outcome = e
