@@ -96,7 +96,7 @@ class HamiltonianDataset(Dataset):
         chunk_len=5,
         dt=0.2,
         integration_time=30,
-        rescaleKG={'K':1, 'm_Lower':1, 'm_Upper':2, 'k_Lower':1, 'k_Upper':2, 'p_Lower':0.4, 'p_Upper':0.4},
+        rescaleKG=None,
         regen=False,
     ):
         super().__init__()
@@ -125,18 +125,21 @@ class HamiltonianDataset(Dataset):
     def integrate(self,z0s,zps,ts):
         return HamiltonianFlow(self.H_wrap(zps), z0s, ts) # HamiltonianFlow(self.H, z0s, ts)
     
-    def generate_trajectory_data(self, n_systems, dt, integration_time, rescaleKG, bs=500):
+    def generate_trajectory_data(self, n_systems, dt, integration_time, rescaleKG=None, bs=500):
         """ 
         Returns ts: (n_systems, traj_len) zs: (n_systems, traj_len, z_dim)
                 zps: (n_systems, 9) = (g, (m1,k1,l1), (m2,k2,l2))
         """
+        if rescaleKG is None:
+            rescaleKG = np.ones((n_systems,))
+      
         n_gen = 0; bs = min(bs, n_systems)
         t_batches, z_batches = [], []
         ## generate parameters
         zps = self.sample_parameters(n_systems, rescaleKG)
         while n_gen < n_systems: 
             ## generate positions and velocities 
-            z0s = self.sample_initial_conditions(bs, rescaleKG) 
+            z0s = self.sample_initial_conditions(bs, rescaleKG[n_gen:n_gen+bs]) 
             ts = jnp.arange(0, integration_time, dt) 
             new_zs = BHamiltonianFlow(
                 self.H, 
@@ -192,9 +195,9 @@ class SHO(HamiltonianDataset):
         ke = (z[...,1]**2).sum()/2
         pe = (z[...,0]**2).sum()/2
         return ke+pe 
-    def sample_initial_conditions(self,bs,rescaleKG):
+    def sample_initial_conditions(self,bs, rescaleKG=None):
         return np.random.randn(bs,2)
-    def sample_parameters(self, bs,rescaleKG):
+    def sample_parameters(self, bs, rescaleKG=None):
         return  
     
     
@@ -223,26 +226,30 @@ class DoubleSpringPendulum(HamiltonianDataset):
         pe += -m1*jnp.sum(g*x1, axis=-1) - m2*jnp.sum(g*x2, axis=-1)
         return (ke + pe).sum() 
        
-    def sample_parameters(self,bs,rescaleKG={'K':1, 'm_Lower':1, 'm_Upper':2, 'k_Lower':1, 'k_Upper':2, 'p_Lower':0.4, 'p_Upper':0.4}): 
+    def sample_parameters(self,bs,rescaleKG=None): 
+        if rescaleKG is None:
+            rescaleKG = np.ones((bs,))
         g = np.random.normal(size=(bs, 3))    
         ghat = g/np.linalg.norm(g, axis=-1, keepdims=True) # normalize 
         g = ghat * np.random.uniform(1,2,(bs,1)) 
-        m1 = rescaleKG['K']*np.random.uniform(rescaleKG['m_Lower'],rescaleKG['m_Upper'],(bs,))
-        m2 = rescaleKG['K']*np.random.uniform(rescaleKG['m_Lower'],rescaleKG['m_Upper'],(bs,))
-        k1 = rescaleKG['K']*np.random.uniform(rescaleKG['k_Lower'],rescaleKG['k_Upper'],(bs,))
-        k2 = rescaleKG['K']*np.random.uniform(rescaleKG['k_Lower'],rescaleKG['k_Upper'],(bs,))
+        m1 = rescaleKG*np.random.uniform(1,2,(bs,))
+        m2 = rescaleKG*np.random.uniform(1,2,(bs,))
+        k1 = rescaleKG*np.random.uniform(1,2,(bs,))
+        k2 = rescaleKG*np.random.uniform(1,2,(bs,))
         l1 = np.random.uniform(1,2,(bs,))
         l2 = np.random.uniform(1,2,(bs,))
         
         mkl = np.stack([m1, m2, k1, k2, l1, l2], axis=-1) # (bs, 6)  
         return np.concatenate([g, mkl], axis=-1) # (bs, 9)
        
-    def sample_initial_conditions(self,bs,rescaleKG={'K':1, 'm_Lower':1, 'm_Upper':2, 'k_Lower':1, 'k_Upper':2, 'p_Lower':0.4, 'p_Upper':0.4}):
+    def sample_initial_conditions(self,bs,rescaleKG=None):
+        if rescaleKG is None:
+            rescaleKG = np.ones((bs,))
+        assert rescaleKG.shape[0] == bs
         x1 = np.array([0,0,-1.5]) +.2*np.random.randn(bs,3)
         x2 = np.array([0,0,-3.]) +.2*np.random.randn(bs,3)
         
-        sc = np.random.uniform(rescaleKG['p_Lower'],rescaleKG['p_Upper'],(bs,1))
-        p = rescaleKG['K'] * sc * np.random.randn(bs,6)
+        p = rescaleKG[:,None] * 0.4 * np.random.randn(bs,6)
         
         z0 = np.concatenate([x1,x2,p],axis=-1) # (bs, 12) 
         return z0 
