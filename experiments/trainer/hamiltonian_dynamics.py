@@ -140,7 +140,7 @@ class HamiltonianDataset(Dataset):
         changedist,
         rescaleKG,
         scale,
-        bs=500
+        bs=100
     ):
         """ 
         Returns ts: (n_systems, traj_len) zs: (n_systems, traj_len, z_dim)
