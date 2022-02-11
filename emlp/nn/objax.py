@@ -452,17 +452,21 @@ class InvarianceLayer_objax(ScalarMLP):
         transformer: Callable, 
     ):   
         n_in = transformer.n_features
-        n_out = transformer.n_scaling
+        # n_out = transformer.n_scaling
         self.transformer = transformer  
         
         self.mlp = BasicMLP_objax(
-            n_in=n_in, n_out=n_out, n_hidden=n_hidden, n_layers=n_layers, div=div
+            n_in=n_in, 
+            n_out=n_out, 
+            n_hidden=n_hidden, 
+            n_layers=n_layers, 
+            div=div
         )   
           
     
     def H(self, x, xp):  
         scalars, scaling = self.transformer(x,xp)  
-        out = scaling * self.mlp(scalars)  
+        out = self.mlp(scalars)  
         return out.sum()  
     
     def __call__(self, x, xp, training = True):
