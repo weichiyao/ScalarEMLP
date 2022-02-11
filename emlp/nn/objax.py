@@ -457,7 +457,7 @@ class InvarianceLayer_objax(ScalarMLP):
         
         self.mlp = BasicMLP_objax(
             n_in=n_in, 
-            n_out=n_out, 
+            n_out=2, 
             n_hidden=n_hidden, 
             n_layers=n_layers, 
             div=div
