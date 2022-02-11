@@ -580,7 +580,7 @@ class Dimensionless(object):
         return vv, us
     
     def create_mapping_new(self):
-        self.nh = np.zeros((6,21),dtype=np.float32)
+        self.nh = np.zeros((10,21),dtype=np.float32)
         self.nh[0][2] = 1 # k1
         self.nh[0][4] = 2 # l1^2
         self.nh[1][3] = 1 # k2
@@ -593,6 +593,18 @@ class Dimensionless(object):
         self.nh[4][11] = 2 # |p1|^2
         self.nh[5][1] = -1 # 1/m2
         self.nh[5][15] = 2 # |p2|^2
+        
+        self.nh[6][0] = 1 # m1 
+        self.nh[6][9] = 1 # gTq1
+        self.nh[7][1] = 1 # m2
+        self.nh[7][10] = 1 # gT(q2-q1)
+        
+        self.nh[8][0] = 1 # m1 
+        self.nh[8][4] = 1 # l1
+        self.nh[8][6] = 1 # |g|
+        self.nh[9][1] = 1 # m2
+        self.nh[9][5] = 1 # l2
+        self.nh[9][6] = 1 # |g|
         
         self.h = np.zeros((32,21),dtype=np.float32)
         # m1 / m2
@@ -910,7 +922,7 @@ class ScalarTransformer(object):
         print(f"Scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
         print(f"Scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
         
-        self.n_scaling = 6
+        self.n_scaling = 10
         self.dimensionless_operator = lambda x: (x, jnp.ones((self.n_scaling,))) 
         self.scaling_standardization = jnp.vstack([jnp.zeros((self.n_scaling,)),jnp.ones((self.n_scaling,))])
         
