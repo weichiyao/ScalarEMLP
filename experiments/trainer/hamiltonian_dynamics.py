@@ -96,17 +96,24 @@ class HamiltonianDataset(Dataset):
         chunk_len=5,
         dt=0.2,
         integration_time=30,
-        rescaleKG=None,
-        regen=False,
+        changedist=False, 
+        rescaleKG=False,
+        scale=None,
+        regen=False 
     ):
         super().__init__()
         root_dir = os.path.expanduser(f"~/datasets/ODEDynamics/{self.__class__}/")
-        filename = os.path.join(root_dir, f"trajectories_{n_systems}_{chunk_len}_{dt}_{integration_time}.pz")
+        filename = os.path.join(
+            root_dir, 
+            f"trajectories_n{n_systems}_l{chunk_len}_dt{dt}_it{integration_time}_c{changedist}_r{rescaleKG}.pz"
+        )
 
         if os.path.exists(filename) and not regen:
             Zs, ZPs = torch.load(filename)
         else:
-            zs, ZPs = self.generate_trajectory_data(n_systems, dt, integration_time, rescaleKG)
+            zs, ZPs = self.generate_trajectory_data(
+                n_systems, dt, integration_time, changedist, rescaleKG, scale
+            )
             Zs = np.asarray(self.chunk_training_data(zs, chunk_len))
             os.makedirs(root_dir, exist_ok=True)
             torch.save((Zs, ZPs), filename)
@@ -125,21 +132,40 @@ class HamiltonianDataset(Dataset):
     def integrate(self,z0s,zps,ts):
         return HamiltonianFlow(self.H_wrap(zps), z0s, ts) # HamiltonianFlow(self.H, z0s, ts)
     
-    def generate_trajectory_data(self, n_systems, dt, integration_time, rescaleKG=None, bs=500):
+    def generate_trajectory_data(
+        self, 
+        n_systems, 
+        dt, 
+        integration_time, 
+        changedist,
+        rescaleKG,
+        scale,
+        bs=500
+    ):
         """ 
         Returns ts: (n_systems, traj_len) zs: (n_systems, traj_len, z_dim)
                 zps: (n_systems, 9) = (g, (m1,k1,l1), (m2,k2,l2))
         """
-        if rescaleKG is None:
-            rescaleKG = np.ones((n_systems,))
+        if not rescaleKG:
+            scale = np.ones((n_systems,))
       
         n_gen = 0; bs = min(bs, n_systems)
         t_batches, z_batches = [], []
         ## generate parameters
-        zps = self.sample_parameters(n_systems, rescaleKG)
+        zps = self.sample_parameters(
+            n_systems,  
+            changedist
+            rescaleKG,  
+            scale
+        )
         while n_gen < n_systems: 
             ## generate positions and velocities 
-            z0s = self.sample_initial_conditions(bs, rescaleKG[n_gen:n_gen+bs]) 
+            z0s = self.sample_initial_conditions(
+                bs, 
+                changedist,
+                rescaleKG,
+                scale[n_gen:n_gen+bs]
+            ) 
             ts = jnp.arange(0, integration_time, dt) 
             new_zs = BHamiltonianFlow(
                 self.H, 
@@ -164,11 +190,11 @@ class HamiltonianDataset(Dataset):
         """ The Hamiltonian function, depending on z=pack(q,p), zp=(g,m1,k1,g1,m2,k2,g2)"""
         raise NotImplementedError 
 
-    def sample_initial_conditions(self,bs,rescaleKG):
+    def sample_initial_conditions(self,bs,changedist,rescaleKG,scale):
         """ Initial condition distribution """
         raise NotImplementedError
 
-    def sample_parameters(self,bs,rescaleKG):
+    def sample_parameters(self,bs,changedist,rescaleKG,scale):
         """ Parameters """
         raise NotImplementedError
 
@@ -195,9 +221,9 @@ class SHO(HamiltonianDataset):
         ke = (z[...,1]**2).sum()/2
         pe = (z[...,0]**2).sum()/2
         return ke+pe 
-    def sample_initial_conditions(self,bs, rescaleKG=None):
+    def sample_initial_conditions(self,bs, changedist=False, rescaleKG=False, scale=None):
         return np.random.randn(bs,2)
-    def sample_parameters(self, bs, rescaleKG=None):
+    def sample_parameters(self, bs, changedist=False, rescaleKG=False, scale=None):
         return  
     
     
@@ -226,30 +252,46 @@ class DoubleSpringPendulum(HamiltonianDataset):
         pe += -m1*jnp.sum(g*x1, axis=-1) - m2*jnp.sum(g*x2, axis=-1)
         return (ke + pe).sum() 
        
-    def sample_parameters(self,bs,rescaleKG=None): 
-        if rescaleKG is None:
-            rescaleKG = np.ones((bs,))
+    def sample_parameters(
+        self,
+        bs, 
+        changedist=False,
+        rescaleKG=False,
+        scale=None
+    ): 
+        if not rescaleKG:
+            scale = np.ones((bs,))
+        upper = 5 if changedist else 2
+        
         g = np.random.normal(size=(bs, 3))    
         ghat = g/np.linalg.norm(g, axis=-1, keepdims=True) # normalize 
         g = ghat * np.random.uniform(1,2,(bs,1)) 
-        m1 = rescaleKG*np.random.uniform(1,2,(bs,))
-        m2 = rescaleKG*np.random.uniform(1,2,(bs,))
-        k1 = rescaleKG*np.random.uniform(1,2,(bs,))
-        k2 = rescaleKG*np.random.uniform(1,2,(bs,))
-        l1 = np.random.uniform(1,2,(bs,))
-        l2 = np.random.uniform(1,2,(bs,))
+         
+        m1 = scale*np.random.uniform(1,upper,(bs,))
+        m2 = scale*np.random.uniform(1,upper,(bs,))
+        k1 = scale*np.random.uniform(1,upper,(bs,))
+        k2 = scale*np.random.uniform(1,upper,(bs,))
+        l1 = np.random.uniform(1,upper,(bs,))
+        l2 = np.random.uniform(1,upper,(bs,))
         
         mkl = np.stack([m1, m2, k1, k2, l1, l2], axis=-1) # (bs, 6)  
         return np.concatenate([g, mkl], axis=-1) # (bs, 9)
        
-    def sample_initial_conditions(self,bs,rescaleKG=None):
-        if rescaleKG is None:
-            rescaleKG = np.ones((bs,))
-        assert rescaleKG.shape[0] == bs
+    def sample_initial_conditions(
+        self,
+        bs,
+        changedist=False, 
+        rescaleKG=False,
+        scale=None
+    ):
+        if not rescaleKG:
+            scale = np.ones((bs,))
+        
+        assert scale.shape[0] == bs
         x1 = np.array([0,0,-1.5]) +.2*np.random.randn(bs,3)
         x2 = np.array([0,0,-3.]) +.2*np.random.randn(bs,3)
         
-        p = rescaleKG[:,None] * 0.4 * np.random.randn(bs,6)
+        p = scale[:,None] * 0.4 * np.random.randn(bs,6)
         
         z0 = np.concatenate([x1,x2,p],axis=-1) # (bs, 12) 
         return z0 
