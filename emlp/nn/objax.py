@@ -442,6 +442,33 @@ class EquivarianceLayer_objax(ScalarMLP):
         
         return out.reshape(-1, 12) #(n,12)
 
+# @export  
+# class InvarianceLayer_objax(ScalarMLP):
+#     def __init__(
+#         self, 
+#         n_hidden: int, 
+#         n_layers: int, 
+#         div: int,
+#         transformer: Callable, 
+#     ):   
+#         n_in = transformer.n_features
+#         self.transformer = transformer  
+
+#         self.mlp1 = BasicMLP_objax(
+#             n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
+#         )   
+#         self.mlp2 = BasicMLP_objax(
+#             n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
+#         )   
+    
+#     def H(self, x, xp):  
+#         scalars, scaling = self.transformer(x,xp)  
+#         out = scaling[...,0] * self.mlp1(scalars) + scaling[...,1] * self.mlp2(scalars)
+#         return out.sum()  
+    
+#     def __call__(self, x, xp, training = True):
+#         return self.H(x, xp)
+ 
 @export  
 class InvarianceLayer_objax(ScalarMLP):
     def __init__(
@@ -454,21 +481,17 @@ class InvarianceLayer_objax(ScalarMLP):
         n_in = transformer.n_features
         self.transformer = transformer  
 
-        self.mlp1 = BasicMLP_objax(
+        self.mlp = BasicMLP_objax(
             n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
-        )   
-        self.mlp2 = BasicMLP_objax(
-            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
-        )   
+        )    
     
     def H(self, x, xp):  
         scalars, scaling = self.transformer(x,xp)  
-        out = scaling[...,0] * self.mlp1(scalars) + scaling[...,1] * self.mlp2(scalars)
+        out = jnp.mean(scaling, axis=-1, keepdims=True) * self.mlp(scalars)  
         return out.sum()  
     
     def __call__(self, x, xp, training = True):
         return self.H(x, xp)
- 
 
 @export
 class Dimensionless(object):
