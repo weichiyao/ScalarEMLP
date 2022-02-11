@@ -466,7 +466,7 @@ class InvarianceLayer_objax(ScalarMLP):
     
     def H(self, x, xp):  
         scalars, scaling = self.transformer(x,xp)  
-        out = self.mlp(scalars)  
+        out = scaling * self.mlp(scalars)  
         return out.sum()  
     
     def __call__(self, x, xp, training = True):
