@@ -442,33 +442,6 @@ class EquivarianceLayer_objax(ScalarMLP):
         
         return out.reshape(-1, 12) #(n,12)
 
-# @export  
-# class InvarianceLayer_objax(ScalarMLP):
-#     def __init__(
-#         self, 
-#         n_hidden: int, 
-#         n_layers: int, 
-#         div: int,
-#         transformer: Callable, 
-#     ):   
-#         n_in = transformer.n_features
-#         self.transformer = transformer  
-
-#         self.mlp1 = BasicMLP_objax(
-#             n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
-#         )   
-#         self.mlp2 = BasicMLP_objax(
-#             n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
-#         )   
-    
-#     def H(self, x, xp):  
-#         scalars, scaling = self.transformer(x,xp)  
-#         out = scaling[...,0] * self.mlp1(scalars) + scaling[...,1] * self.mlp2(scalars)
-#         return out.sum()  
-    
-#     def __call__(self, x, xp, training = True):
-#         return self.H(x, xp)
- 
 @export  
 class InvarianceLayer_objax(ScalarMLP):
     def __init__(
@@ -481,17 +454,22 @@ class InvarianceLayer_objax(ScalarMLP):
         n_in = transformer.n_features
         self.transformer = transformer  
 
-        self.mlp = BasicMLP_objax(
+        self.mlp1 = BasicMLP_objax(
             n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
-        )    
+        )   
+        self.mlp2 = BasicMLP_objax(
+            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
+        )   
     
     def H(self, x, xp):  
         scalars, scaling = self.transformer(x,xp)  
-        out = jnp.mean(scaling, axis=-1, keepdims=True) * self.mlp(scalars)  
+        out = scaling[...,0] * self.mlp1(scalars) + scaling[...,1] * self.mlp2(scalars)
         return out.sum()  
     
     def __call__(self, x, xp, training = True):
         return self.H(x, xp)
+ 
+
 
 @export
 class Dimensionless(object):
@@ -604,10 +582,15 @@ class Dimensionless(object):
     
     def create_mapping_new(self):
         self.nh = np.zeros((2,21),dtype=np.float32)
-        self.nh[0][2] = 1
-        self.nh[1][3] = 1
-        self.nh[0][4] = 2
-        self.nh[1][5] = 2
+        # self.nh[0][2] = 1 # k1
+        # self.nh[0][4] = 2 # l1^2
+        # self.nh[1][3] = 1 # k2
+        # self.nh[1][5] = 2 # l2^2
+        self.nh[0][0] = -1 # 1/m1 
+        self.nh[0][11] = 2 # |p1|^2
+        self.nh[1][1] = -1 # 1/m2
+        self.nh[1][15] = 2 # |p2|^2
+        
         
         self.h = np.zeros((32,21),dtype=np.float32)
         # m1 / m2
