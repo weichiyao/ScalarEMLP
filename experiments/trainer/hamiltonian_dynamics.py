@@ -154,7 +154,7 @@ class HamiltonianDataset(Dataset):
         ## generate parameters
         zps = self.sample_parameters(
             n_systems,  
-            changedist
+            changedist,
             rescaleKG,  
             scale
         )
