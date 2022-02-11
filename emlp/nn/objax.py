@@ -452,18 +452,17 @@ class InvarianceLayer_objax(ScalarMLP):
         transformer: Callable, 
     ):   
         n_in = transformer.n_features
+        n_out = transformer.n_scaling
         self.transformer = transformer  
-
+        
         self.mlp1 = BasicMLP_objax(
-            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
+            n_in=n_in, n_out=n_out, n_hidden=n_hidden, n_layers=n_layers, div=div
         )   
-        self.mlp2 = BasicMLP_objax(
-            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
-        )   
+          
     
     def H(self, x, xp):  
         scalars, scaling = self.transformer(x,xp)  
-        out = scaling[...,0] * self.mlp1(scalars) + scaling[...,1] * self.mlp2(scalars)
+        out = scaling * self.mlp(scalars)  
         return out.sum()  
     
     def __call__(self, x, xp, training = True):
@@ -581,7 +580,7 @@ class Dimensionless(object):
         return vv, us
     
     def create_mapping_new(self):
-        self.nh = np.zeros((2,21),dtype=np.float32)
+        self.nh = np.zeros((4,21),dtype=np.float32)
         # self.nh[0][2] = 1 # k1
         # self.nh[0][4] = 2 # l1^2
         # self.nh[1][3] = 1 # k2
@@ -590,7 +589,10 @@ class Dimensionless(object):
         self.nh[0][11] = 2 # |p1|^2
         self.nh[1][1] = -1 # 1/m2
         self.nh[1][15] = 2 # |p2|^2
-        
+        self.nh[2][2] = 1 # k1 
+        self.nh[2][18] = 2 # |q1|^2
+        self.nh[3][3] = 1 # k2
+        self.nh[3][20] = 2 # |q2-q1|^2
         
         self.h = np.zeros((32,21),dtype=np.float32)
         # m1 / m2
@@ -907,19 +909,21 @@ class ScalarTransformer(object):
         )   
         print(f"Scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
         print(f"Scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
-        self.dimensionless_operator = lambda x: (x, jnp.array([1,1])) 
-        self.scaling_standardization = jnp.array([[0,0],[1,1]])
+        self.dimensionless_operator = lambda x: (x, jnp.array([1,1,1,1])) 
+        self.scaling_standardization = jnp.array([[0,0,0,0],[1,1,1,1]])
+        self.n_scaling = 4
         if self.dimensionless:
             # Create dimensionless features 
             self.dimensionless_operator = Dimensionless() 
             scalars, scaling = self.dimensionless_operator(scalars)
             print(f"Dimensionless scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
             print(f"Dimensionless scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
-            print(f"Dimensionless scaling max={jnp.round(jnp.max(scaling), 2)} and min={jnp.round(jnp.min(scaling), 4)}")
+            print(f"Dimensionless scaling max={jnp.round(jnp.max(scaling, axis=0), 2)} and min={jnp.round(jnp.min(scaling, axis=0), 4)}")
             self.scaling_standardization = jnp.stack(
                 [jnp.min(scaling, axis=0), jnp.max(scaling, axis=0) - jnp.min(scaling, axis=0)],
                 axis = 0
             )
+            self.n_scaling = scaling.shape[-1]
         # print(f"Dimension of features is {scalars.shape[1]}, and the rank is {jnp.linalg.matrix_rank(scalars)}")
         
 
