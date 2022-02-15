@@ -17,15 +17,15 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
           'info': logging.INFO,'debug': logging.DEBUG}
 
 
-def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021, 
-                       bs=500,lr=5e-3,max_grad_norm=0.5,device='cuda',split={'train':-1,'val':100,'test':500},
+def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=250,ndata=30600,seed=2022, 
+                       bs=512,lr=1e-3,max_grad_norm=0.5,device='cuda',split={'train':-1,'val':100,'test':500},
                        rescale_config={'rand_lower':3, 'rand_upper':7},
-                       data_config={'chunk_len':10,'dt':0.2,'integration_time':6},
+                       data_config={'chunk_len':10,'dt':0.2,'integration_time':12},
                        transformer_config={
                            'method':'none', 'dimensionless':True, 'n_rad':50, 
                            'n_quantiles':200, 'transform_distribution':'uniform'
                        },
-                       net_config={'n_layers':4,'n_hidden':200,'div':2}, log_level='info',
+                       net_config={'n_layers':5,'n_hidden':100,'div':1}, log_level='info',
                        trainer_config={'log_dir':'/home','log_args':{'minPeriod':.02,'timeFrac':.75},},
                        save=False,trial=1):
     logging.getLogger().setLevel(levels[log_level])
@@ -92,7 +92,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
           
     # Trainer 
     opt_constr = objax.optimizer.Adam 
-    lr_sched = lambda e: lr if (e < 100) else (lr*0.5 if e < 200 else (lr*0.1))   
+    lr_sched = lambda e: lr  
     return IntegratedDynamicsTrainer(
         model,dataloaders,opt_constr,lr_sched,max_grad_norm,**trainer_config
     )
