@@ -476,139 +476,85 @@ class InvarianceLayer_objax(ScalarMLP):
 
 @export
 class Dimensionless(object):
-    def __init__(self):
-        # self.create_mapping()
-        # self.adjust_mapping()
-        self.create_mapping_new()
+    def __init__(self): 
+        self.create_mapping()
         self.h = jnp.array(self.h)
-        self.nh = jnp.array(self.nh)
-
-    def make_base(self):
-        """
-        Make powers of the base dimensions 
-        """
-        names = np.array(
-            ["m_1", "m_2", "k_1", "k_2", "l_1", "l_2", 
-             "g", "p_1", "p_2", "q_1", "(q_2-q_1)"]
-        )
-        a_xs = np.array([[1, 0,  0], # kg
-                         [1, 0,  0], # kg
-                         [1, 0, -2], # N / m = kg / s^2
-                         [1, 0, -2], # N / m = kg / s^2
-                         [0, 1,  0], # m
-                         [0, 1,  0], # m
-                         [0, 1, -2], # m / s^2
-                         [1, 1, -1], # kg m / s
-                         [1, 1, -1], # kg m / s
-                         [0, 1,  0], # m
-                         [0, 1,  0]] # m
-                        ).astype(int)
-        scalars = np.array([0, 1, 2, 3, 4, 5]).astype(int)
-        vectors = np.array([6, 7, 8, 9, 10]).astype(int)
-        a_y = np.array([1, 2, -2]).astype(int) # J = kg m^2 / s^2 
-        return a_xs, a_y, names, scalars, vectors
-
-    def make_flat_features(self, a_xs, x_names, scalars, vectors):
-        """
-        reformat the blobby features into flat, scalar features:
-        hack; totally non-pythonic
-        """
-        _, S_f = a_xs.shape
-        foo = len(vectors)
-        J_f = len(scalars) + foo * (foo + 1) // 2
-        names_f = np.zeros(J_f).astype(str)
-        a_xs_f = np.zeros((J_f, S_f)).astype(int) 
-        powers_f = np.zeros(J_f).astype(int)
-        for i, j in enumerate(scalars):
-            names_f[i] = x_names[j]
-            a_xs_f[i] = a_xs[j]
-            powers_f[i] = 1
-        i += 1
-        for ii, j1 in enumerate(vectors):
-            names_f[i] = "|" + x_names[j1] + "|"
-            a_xs_f[i] = a_xs[j1]
-            powers_f[i] = 1
-            i += 1
-            for j2 in vectors[ii+1:]:
-                names_f[i] = "(" + x_names[j1] + "^\\top " + x_names[j2] + ")"
-                a_xs_f[i] = a_xs[j1] + a_xs[j2] # because we are multiplying
-                powers_f[i] = 2
-                i+= 1
-        return a_xs_f, names_f, powers_f
+        self.nh = jnp.array(self.nh) 
     
-    def hogg_msv_integer_solve(self, A, b):
-        """
-        Find all solutions to Ax=b where A, x, b are integer.
-
-        ## inputs:
-        - A - [n, m] integer matrix - n < m, please
-        - b - [n] integer vector
-
-        ## outputs:
-        - vv - [m] integer vector solution to the problem Ax=b
-        - us - [k, m] set of k integer vector solutions to the problem Ax=0
-
-        ## bugs / issues:
-        - Might get weird when k <= 1.
-        - Might get weird if k > m - n.
-        - Depends EXTREMELY strongly on everything being integer.
-        - Uses smithnormalform package, which is poorly documented.
-        - Requires smithnormalform package to have been imported as follows:
-            !pip install smithnormalform
-            from smithnormalform import snfproblem
-            from smithnormalform import matrix as snfmatrix
-            from smithnormalform import z as snfz
-        """
-        ## perform the horrifying packing into SNF Matrix format; HACK
-        n, m = A.shape
-        assert(m >= n)  
-        assert(len(b) == n)
-        assert A.dtype is np.dtype(int)
-        assert b.dtype is np.dtype(int)
-        smat = snfmatrix.Matrix(n, m, [snfz.Z(int(a)) for a in A.flatten()])
-        ## calculate the Smith Normal Form 
-        prob = snfproblem.SNFProblem(smat)
-        prob.computeSNF()
-        ## perform the horrifying unpacking from SNF Matrix form; HACK
-        SS = np.array([a.a for a in prob.S.elements]).reshape(n, n)
-        TT = np.array([a.a for a in prob.T.elements]).reshape(m, m)
-        JJ = np.array([a.a for a in prob.J.elements]).reshape(n, m)
-        ## Find a basis for the lattice of null vectors
-        us = None
-        zeros = np.sum(JJ ** 2, axis=0) == 0
-        us = (TT[:, zeros]).T
-        DD = SS @ b
-        v = np.zeros(m)
-        v[:n] = DD / np.diag(JJ)
-        vv = (TT @ v).astype(int) 
-        return vv, us
-    
-    def create_mapping_new(self):
-        self.nh = np.zeros((10,21),dtype=np.float32)
+    def create_mapping(self):
+        self.nh = np.zeros((26,21),dtype=np.float32)
+        ## First group
         self.nh[0][2] = 1 # k1
         self.nh[0][4] = 2 # l1^2
         self.nh[1][3] = 1 # k2
         self.nh[1][5] = 2 # l2^2
-        self.nh[2][2] = 1 # k1 
-        self.nh[2][18] = 2 # |q1|^2
-        self.nh[3][3] = 1 # k2
-        self.nh[3][20] = 2 # |q2-q1|^2
-        self.nh[4][0] = -1 # 1/m1 
-        self.nh[4][11] = 2 # |p1|^2
-        self.nh[5][1] = -1 # 1/m2
-        self.nh[5][15] = 2 # |p2|^2
         
-        self.nh[6][0] = 1 # m1 
-        self.nh[6][9] = 1 # gTq1
-        self.nh[7][1] = 1 # m2
-        self.nh[7][10] = 1 # gT(q2-q1)
+        self.nh[2][3] = 1 # k2
+        self.nh[2][4] = 2 # l1^2
+        self.nh[3][2] = 1 # k1
+        self.nh[3][5] = 2 # l2^2
         
-        self.nh[8][0] = 1 # m1 
-        self.nh[8][4] = 1 # l1
-        self.nh[8][6] = 1 # |g|
-        self.nh[9][1] = 1 # m2
-        self.nh[9][5] = 1 # l2
-        self.nh[9][6] = 1 # |g|
+        self.nh[4][2] = 1 # k1
+        self.nh[4][4] = 1 # l1
+        self.nh[4][5] = 1 # l2
+        self.nh[5][3] = 1 # k2
+        self.nh[5][4] = 1 # l1
+        self.nh[5][5] = 1 # l2
+        
+        ## Second group
+        self.nh[6][2] = 1 # k1 
+        self.nh[6][18] = 2 # |q1|^2
+        self.nh[7][3] = 1 # k2
+        self.nh[7][20] = 2 # |q2-q1|^2
+        self.nh[8][3] = 1 # k2 
+        self.nh[8][18] = 2 # |q1|^2
+        self.nh[9][2] = 1 # k1
+        self.nh[9][20] = 2 # |q2-q1|^2
+        self.nh[10][2] = 1 # k1 
+        self.nh[10][18] = 1 # |q1|
+        self.nh[10][20] = 1 # |q2-q1|
+        self.nh[11][3] = 1 # k2
+        self.nh[11][18] = 1 # |q1|
+        self.nh[11][20] = 1 # |q2-q1|
+        
+        
+        ## Third group
+        self.nh[12][0] = -1 # 1/m1 
+        self.nh[12][11] = 2 # |p1|^2
+        self.nh[13][1] = -1 # 1/m2
+        self.nh[13][15] = 2 # |p2|^2
+        self.nh[14][1] = -1 # 1/m2 
+        self.nh[14][11] = 2 # |p1|^2
+        self.nh[15][0] = -1 # 1/m1
+        self.nh[15][15] = 2 # |p2|^2
+        self.nh[16][0] = -1 # 1/m1 
+        self.nh[16][12] = 2 # p1Tp2
+        self.nh[17][1] = -1 # 1/m2
+        self.nh[17][12] = 2 # p1Tp2
+        
+        ## Fourth group
+        self.nh[18][0] = 1 # m1 
+        self.nh[18][9] = 1 # gTq1
+        self.nh[19][1] = 1 # m2
+        self.nh[19][10] = 1 # gT(q2-q1)
+        self.nh[20][0] = 1 # m1 
+        self.nh[20][10] = 1 # gT(q2-q1)
+        self.nh[21][1] = 1 # m2
+        self.nh[21][9] = 1 # gTq1
+        
+        ## Fifth group
+        self.nh[22][0] = 1 # m1 
+        self.nh[22][4] = 1 # l1
+        self.nh[22][6] = 1 # |g|
+        self.nh[23][1] = 1 # m2
+        self.nh[23][5] = 1 # l2
+        self.nh[23][6] = 1 # |g|
+        self.nh[24][0] = 1 # m1 
+        self.nh[24][5] = 1 # l2
+        self.nh[24][6] = 1 # |g|
+        self.nh[25][1] = 1 # m2
+        self.nh[25][4] = 1 # l1
+        self.nh[25][6] = 1 # |g|
         
         self.h = np.zeros((32,21),dtype=np.float32)
         # m1 / m2
@@ -715,101 +661,8 @@ class Dimensionless(object):
         self.h[29] = self.h[21] * 2
         self.h[30] = self.h[22] * 2
         self.h[31] = self.h[23] * 2
-        
-    def create_mapping(self): 
-        """
-        nh: final scaling matrix (2, 21)
-        h: dimentionless matrix (18,21)
-        """
-        a_xs, a_y, names, scalars, vectors = self.make_base()
-        a_xs_flat, names_flat, _ = self.make_flat_features(a_xs, names, scalars, vectors)
-        _, self.h = self.hogg_msv_integer_solve(a_xs_flat.T, a_y) 
-        _, m = self.h.shape
-        self.nh = np.zeros((2,m))
-        # manually make the scaling  
-        self.nh[0][names_flat=="m_1"], self.nh[0][names_flat=="|p_1|"] = -1, 2
-        self.nh[1][names_flat=="m_2"], self.nh[1][names_flat=="|p_2|"] = -1, 2
-
-    def adjust_mapping(self):
-        self.h[0] = -self.h[0]
-        self.h[3] = -self.h[3]
-        self.h[4] = -self.h[4]
-
-        h0_new = np.concatenate([[0], self.h[0][:-1]])
-        h0_new[4] = 0
-        h0_new[2] = -1
-
-        h3_new = np.concatenate([[0], self.h[3][:-1]])
-        h3_new[7] = 0
-        h3_new[6] = -1
-
-        h4_new = np.concatenate([[0], self.h[4][:-1]]) 
-
-        self.h[5] = -self.h[5]
-        assert self.h[5][7] == 3
-        assert self.h[5][8] == -1 
-        self.h[5][7] = 0
-        self.h[5][8] = 0 
-        h5_new = np.concatenate([[0], self.h[5][:-1]])
-        self.h[5][6] = -1 
-        self.h[5][11] = 2 
-        h5_new[6] = -1
-        h5_new[15] = 2
-        assert self.h[10][7] == -1 
-        assert self.h[10][13] == 1 
-        assert self.h[11][7] == -1 
-        assert self.h[11][14] == 1 
-        assert self.h[11][0] == -1
-        assert self.h[11][2] == 1 
-        self.h[10][7] = 0
-        self.h[10][13] = 0 
-        self.h[11][7] = 0 
-        self.h[11][14] = 0 
-        self.h[10][9] = 1
-        self.h[11][10] = 1 
-
-        self.h[11][0] = 0
-        self.h[11][2] = 0
-        self.h[11][1] = -1 
-        self.h[11][3] = 1
-        assert self.h[15][4] == -1
-        assert self.h[16][4] == -2
-        assert self.h[17][4] == -1
-        assert self.h[15][18] == 1
-        assert self.h[17][20] == 1
-        self.h[16][4] = -1
-        self.h[16][5] = -1
-
-        self.h[15][4] = -2 
-        self.h[17][4] = 0
-        self.h[17][5] = -2
-
-        self.h[15][18] = 2
-        self.h[17][20] = 2
-
-        keepidx = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17] 
-        h_ad = np.zeros((len(keepidx),self.h.shape[1]))
-        for i in range(len(keepidx)):
-            h_ad[i] = self.h[keepidx[i]] 
-        h_ad[6] = h0_new 
-        h_ad[7] = h3_new
-        h_ad[8] = h4_new
-        h_ad[9] = h5_new 
-        h_ad[12] = -self.h[1] 
-        h_ad[13] = -self.h[2]    
-        
-        idx_sqrt = [0,1,2,3,4,5,6,7,8,9,12,13,14,16]
-        h_ad = np.concatenate(
-            [h_ad, h_ad[idx_sqrt]/2], 
-            axis=0
-        )
-            
-        self.h = h_ad
-        self.nh = np.zeros((2,self.h.shape[1]))
-        self.nh[0][2] = 1
-        self.nh[1][3] = 1
-        self.nh[0][4] = 2
-        self.nh[1][5] = 2
+         
+     
 
     def map_m_func(self, params, x):
         """x (d,) and h (m,d) gives output (m,)"""
