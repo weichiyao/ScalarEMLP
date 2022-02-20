@@ -528,9 +528,9 @@ class Dimensionless(object):
         self.nh[15][0] = -1 # 1/m1
         self.nh[15][15] = 2 # |p2|^2
         self.nh[16][0] = -1 # 1/m1 
-        self.nh[16][12] = 2 # p1Tp2
+        self.nh[16][12] = 1 # p1Tp2
         self.nh[17][1] = -1 # 1/m2
-        self.nh[17][12] = 2 # p1Tp2
+        self.nh[17][12] = 1 # p1Tp2
         
         ## Fourth group
         self.nh[18][0] = 1 # m1 
