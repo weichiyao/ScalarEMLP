@@ -779,7 +779,7 @@ class ScalarTransformer(object):
         print(f"Scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
         print(f"Scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
         
-        self.n_scaling = 10
+        self.n_scaling = 26
         self.dimensionless_operator = lambda x: (x, jnp.ones((self.n_scaling,))) 
         self.scaling_standardization = jnp.vstack([jnp.zeros((self.n_scaling,)),jnp.ones((self.n_scaling,))])
         
