@@ -449,6 +449,7 @@ class InvarianceLayer_objax(Module):
         return out.sum()  
     
     def __call__(self, x):
+        x = x.reshape(-1,4,3) # (n,4,3)
         return self.H(x)
 
 @export
