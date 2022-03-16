@@ -35,13 +35,14 @@ def symplectic_form(z):
     q, p = unpack(z)
     return pack(p, -q)
 
-def hamiltonian_dynamics(hamiltonian, z,t,pv=None,ps=None):
+def hamiltonian_dynamics(hamiltonian, z,t, pv=None, ps=None):
     """ 
     Takes 
     - a Hamiltonian function, 
-    - a state vector z, 
+    - a state vector z, of size (..., m*3)
     - an unused time t,
-    - parameters zp including g, m1, k1, l2, m2, k2, l2
+    - pv: 3-dimensional vectors parameters, of size (..., l*3)
+    - ps: scalar parameters, of size (..., k) 
     to compute the hamiltonian dynamics J∇H
     """
     # Differentiate `hamiltonian` with respect to the first positional argument
@@ -52,7 +53,7 @@ def hamiltonian_dynamics(hamiltonian, z,t,pv=None,ps=None):
 
 def HamiltonianFlow(H,z0,T,pv=None,ps=None):
     """ Converts a Hamiltonian H and initial conditions z0,
-        as well as other parameters pv <g> and ps <m1, k1, l2, m2, k2, l2>
+        as well as other parameters pv and ps 
         to rolled out trajectory at time points T.
         z0 shape (state_dim,) and T shape (t,) yields (t,state_dim) rollout."""
     dynamics = lambda z,t,pv,ps: hamiltonian_dynamics(H,z,t,pv,ps)
