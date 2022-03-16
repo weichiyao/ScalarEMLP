@@ -325,7 +325,7 @@ class KnownDynamicsTrainer(Regressor):
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
         (z0, ts), true_zs = minibatch
-        pred_zs = BHamiltonianFlow(self.model,z0,ts[0])
+        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],tol=2e-6)
         return jnp.mean((pred_zs - true_zs)**2)
 
     def metrics(self, loader):
@@ -367,11 +367,16 @@ def pred_and_gt(ds,model,minibatch):
     gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
 
+def pred_and_gt_ode(ds,model,minibatch):
+    (z0, _), _ = minibatch
+    pred_zs = BOdeFlow(model,z0,ds.T_long,tol=2e-6)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
+    return np.stack([pred_zs,gt_zs],axis=-1)
+
 def pred_and_gt_known(model,minibatch):
     (z0, ts), gt_zs = minibatch
     pred_zs = BHamiltonianFlow(model,z0,ts[0],tol=2e-6) 
     return np.stack([pred_zs,gt_zs],axis=-1)
-   
    
 def log_rollout_error_ode(ds,model,minibatch):
     """ Computes the log of the geometric mean of the rollout
@@ -385,19 +390,12 @@ def log_rollout_error_ode(ds,model,minibatch):
     log_geo_mean = jnp.log(clamped_errs).mean()
     return log_geo_mean
 
-def pred_and_gt_ode(ds,model,minibatch):
-    (z0, _), _ = minibatch
-    pred_zs = BOdeFlow(model,z0,ds.T_long,tol=2e-6)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
-    return np.stack([pred_zs,gt_zs],axis=-1)
-
-
 def log_rollout_error_known(ds,model,minibatch):
     """ Computes the log of the geometric mean of the rollout
         error computed between the dataset ds and HNN model
         on the initial condition in the minibatch."""
     (z0, ts), gt_zs = minibatch
-    pred_zs = BHamiltonianFlow(model,z0,ts[0])
+    pred_zs = BHamiltonianFlow(model,z0,ts[0],tol=2e-6)
     errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
     clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
     log_geo_mean = jnp.log(clamped_errs).mean()
