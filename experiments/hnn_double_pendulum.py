@@ -1,5 +1,5 @@
-from emlp.nn import ScalarMLP, InvarianceLayer_objax, ScalarTransformer
-from trainer.hamiltonian_dynamics import IntegratedDynamicsTrainer,DoubleSpringPendulum,hnnScalars_trial
+from emlp.nn import InvarianceLayerDP, ScalarTransformerDP
+from trainer.hamiltonian_dynamics import IntegratedDynamicsTrainer,DoubleSpringPendulum,hnnDP_trial
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr,FixedNumpySeed,FixedPytorchSeed
 from trainer.utils import LoaderTo
@@ -17,7 +17,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
           'info': logging.INFO,'debug': logging.DEBUG}
 
 
-def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=250,ndata=30600,seed=2022, 
+def makeTrainer(*,dataset=DoubleSpringPendulum,num_epochs=250,ndata=30600,seed=2022, 
                        bs=512,lr=1e-3,max_grad_norm=0.5,device='cuda',split={'train':-1,'val':100,'test':500},
                        rescale_config={'rand_lower':3, 'rand_upper':7},
                        data_config={'chunk_len':10,'dt':0.2,'integration_time':12},
@@ -73,17 +73,23 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=250,ndata=30600
           
     # Create the transformer and the model 
     zs_train = base_ds.Zs[datasets['train']._ids].reshape(-1,4,3)
-    zps_train = np.repeat(
-        base_ds.ZPs[datasets['train']._ids], 
+    pv_train = np.repeat(
+        base_ds.PV[datasets['train']._ids], 
         data_config['chunk_len'], 
         axis=0
     ) 
-    stransformer = ScalarTransformer(
+    ps_train = np.repeat(
+        base_ds.PS[datasets['train']._ids], 
+        data_config['chunk_len'], 
+        axis=0
+    ) 
+    stransformer = ScalarTransformerDP(
         zs = zs_train, 
-        zps = zps_train,   
+        pv = pv_train,
+        ps = ps_train,
         **transformer_config
     ) 
-    model = InvarianceLayer_objax(transformer=stransformer, **net_config)
+    model = InvarianceLayerDP(transformer=stransformer, **net_config)
           
     # Create data loaders
     dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
@@ -98,7 +104,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=250,ndata=30600
     )
 
 if __name__ == "__main__":
-    Trial = hnnScalars_trial(makeTrainerScalars)
-    cfg, outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__))
+    Trial = hnnDP_trial(makeTrainer)
+    cfg, outcome = Trial(argupdated_config(makeTrainer.__kwdefaults__))
     print(outcome)
 
