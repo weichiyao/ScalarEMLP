@@ -1,4 +1,4 @@
-from emlp.nn import EquivarianceLayer_objax, ScalarTransformer, ScalarMLP
+from emlp.nn import EquivarianceLayerDP, ScalarTransformerDP 
 from trainer.hamiltonian_dynamics import IntegratedODETrainer,DoubleSpringPendulum,odeScalars_trial
 from torch.utils.data import DataLoader
 from oil.utils.utils import FixedNumpySeed,FixedPytorchSeed
@@ -24,7 +24,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
                     'method':'rbf', 'dimensionless':False, 'n_rad':50, 
                     'n_quantiles':1000, 'transform_distribution':'uniform'
                 },
-                net_config={'n_layers':3,'n_hidden':100},log_level='warn',
+                net_config={'n_layers':3,'n_hidden':100,'div':1},log_level='warn',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},}, 
                 save=False, trial=1):
 
@@ -35,18 +35,16 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
         datasets = split_dataset(base_ds,splits=split)
     
         zs_train = base_ds.Zs[datasets['train']._ids].reshape(-1,4,3)
-        zps_train = np.repeat(
-            base_ds.ZPs[datasets['train']._ids], 
-            data_config['chunk_len'], 
-            axis=0
-        ) 
-        stransformer = ScalarTransformer(
+        pv_train = np.repeat(base_ds.PV[datasets['train']._ids], data_config['chunk_len'], axis=0) 
+        ps_train = np.repeat(base_ds.PS[datasets['train']._ids], data_config['chunk_len'], axis=0) 
+       
+        stransformer = ScalarTransformerDP(
             zs = zs_train, 
-            zps = zps_train,  
-            seed = seed, 
+            pv = pv_train,
+            ps = ps_train,
             **transformer_config
         )
-    model = EquivarianceLayer_objax(transformer=stransformer, **net_config)
+    model = EquivarianceLayerDP(transformer=stransformer, **net_config)
     
     dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
                    num_workers=0,pin_memory=False)) for k,v in datasets.items()}
