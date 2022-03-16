@@ -130,7 +130,7 @@ class HamiltonianDataset(Dataset):
         return (self.Zs[i, 0], self.ZPs[i], self.T), self.Zs[i]
 
     def integrate(self,z0s,zps,ts):
-        return HamiltonianFlow(self.H_wrap(zps), z0s, ts) # HamiltonianFlow(self.H, z0s, ts)
+        return HamiltonianFlow(self.H, z0s, ts, zps)
     
     def generate_trajectory_data(
         self, 
