@@ -187,7 +187,7 @@ class InvarianceLayerDP(ScalarEMLP):
         return self.H(x, pv, ps)
  
 @export
-class EquivarianceLayerDP(Module):
+class EquivarianceLayerDP(ScalarEMLP):
     def __init__(
         self,  
         n_hidden: int, 
