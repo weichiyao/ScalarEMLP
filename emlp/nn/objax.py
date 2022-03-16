@@ -112,7 +112,7 @@ class EquivarianceLayerGeneral(ScalarEMLP):
         )   
 
     def __call__(self, x, t, pv=None, ps=None):
-        scalars = self.transformer(x, pv, ps) # (n, n_in)
+        scalars, _ = self.transformer(x, pv, ps) # (n, n_in)
         out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n, n_out, 1)
         term_x = out[:,:self.n_zs**2].reshape(-1,self.n_zs,self.n_zs,1)
         ret = jnp.sum(
@@ -149,7 +149,7 @@ class InvarianceLayerGeneral(ScalarEMLP):
         )    
 
     def H(self, x, pv=None, ps=None):  
-        scalars = self.transformer(x, pv, ps)  
+        scalars, _ = self.transformer(x, pv, ps)  
         out = self.mlp(scalars)  
         return out.sum()  
     
@@ -178,7 +178,7 @@ class InvarianceLayerDP(ScalarEMLP):
             div=div
         )   
     
-    def H(self, x, pv, ps):  
+    def H(self, x, pv=None, ps=None):  
         scalars, scaling = self.transformer(x,pv,ps)  
         out = scaling * self.mlp(scalars)  
         return out.sum()  
@@ -725,9 +725,9 @@ class ScalarTransformerGeneral(ScalarTransformer):
         n = x.shape[0]
 
         xx = jnp.einsum('bix,bjx->bij', x, x).reshape(n, -1)  # (n, m*m) 
-        xxsqrt = jnp.sqrt(jnp.einsum('bix,bix->bi', x, x))     
-         
-        scalars = jnp.concatenate([xx, xxsqrt], axis=-1)  
+        xxsqrt = jnp.sqrt(jnp.einsum('bix,bix->bi', x, x))    
+        scalars = jnp.concatenate([xx, xxsqrt], axis=-1)
+
         if pv is not None: 
             pv = pv.reshape(-1,self.n_pv,3)
             vx = jnp.einsum("...ij,...ij", pv, x).reshape(n, -1) # (n, l*l)
@@ -735,12 +735,11 @@ class ScalarTransformerGeneral(ScalarTransformer):
             vvsqrt = jnp.sqrt(vv) # (n, m*m)
             scalars = jnp.concatenate([scalars, vx, vv, vvsqrt], axis=-1)
         if ps is not None:
-            ps = ps.reshape(-1,self.n_ps,3)
             scalars = jnp.concatenate([scalars, ps, 1/ps], axis=-1)
         return scalars  
 
     def __call__(self, x, pv=None, ps=None):
-        """Input x of dim (n,m,3), param vector input of (n,l,3) scalar input of (n,k)"""
+        """Input x of dim (n,m*3), param vector input of (n,l*3) scalar input of (n,k)"""
         # Compute inner product scalars 
         scalars = self._compute_scalars(x, pv, ps)
         # Create dimensionless features 
@@ -786,7 +785,7 @@ class ScalarTransformerDP(ScalarTransformer):
             list(itertools.combinations_with_replacement(jnp.arange(0,4), r=2))
         )
         idx_map = jnp.array([2,3,0,1])
-        idx = self.idx_map[idx] 
+        idx = idx_map[idx] 
         idx_sqrt = jnp.concatenate(
             [jnp.zeros(1, dtype=int), jnp.cumsum(jnp.arange(2,5)[::-1])], 
             axis=0
