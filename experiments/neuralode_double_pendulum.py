@@ -1,5 +1,5 @@
 from emlp.nn import EquivarianceLayerDP, ScalarTransformerDP 
-from trainer.hamiltonian_dynamics import IntegratedODETrainer,DoubleSpringPendulum,odeScalars_trial
+from trainer.hamiltonian_dynamics import IntegratedODETrainer,DoubleSpringPendulum,odeDP_trial
 from torch.utils.data import DataLoader
 from oil.utils.utils import FixedNumpySeed,FixedPytorchSeed
 from trainer.utils import LoaderTo 
@@ -17,7 +17,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
                     'warn': logging.WARNING,'warning': logging.WARNING,
                     'info': logging.INFO,'debug': logging.DEBUG}
 
-def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021,aug=False,
+def makeTrainer(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2021,aug=False,
                 bs=500,lr=5e-3,max_grad_norm=float('inf'),device='cuda',split={'train':500,'val':.1,'test':.1},
                 data_config={'chunk_len':5,'dt':0.2,'integration_time':30,'regen':False},
                 transformer_config={
@@ -58,6 +58,6 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
     )
 
 if __name__ == "__main__":
-    Trial = odeScalars_trial(makeTrainerScalars)
-    cfg,outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__))
+    Trial = odeDP_trial(makeTrainer)
+    cfg,outcome = Trial(argupdated_config(makeTrainer.__kwdefaults__))
     print(outcome)
