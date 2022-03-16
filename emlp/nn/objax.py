@@ -186,8 +186,61 @@ class InvarianceLayerDP(ScalarEMLP):
     def __call__(self, x, pv=None, ps=None, training=True):
         return self.H(x, pv, ps)
  
+@export
+class EquivarianceLayerDP(Module):
+    def __init__(
+        self,  
+        n_hidden: int, 
+        n_layers: int, 
+        div: int,
+        transformer: Callable, 
+    ):
+        super().__init__()  
+        n_in = transformer.n_features
+        self.n_zs = transformer.n_zs
+        self.n_pv = transformer.n_pv
+
+        n_out = self.n_zs * (self.n_zs + self.n_pv + 1) 
+        self.transformer = transformer  
+        self.mlp = BasicMLP_objax(
+            n_in=n_in, n_out=n_out, n_hidden=n_hidden, n_layers=n_layers, div=div
+        )   
+
+    def __call__(self, x, t, pv, ps): 
+        """
+        x (n,12)
+        pv (n,3)
+        ps (n,6)
+        """
+        scalars, _ = self.transformer(x,pv,ps)  
+        out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n, n_out, 1)
 
 
+        x = x.reshape(-1, self.n_zs, 3)
+        pv = pv.reshape(-1, self.n_pv, 3)
+ 
+        term_x = out[:,:self.n_zs**2].reshape(-1,self.n_zs,self.n_zs,1)
+        ret = jnp.sum(
+            term_x*jnp.expand_dims(x, 1), 
+            axis=-2
+        ) # (n,m,3)
+
+        term_g = out[:,self.n_zs**2:self.n_zs**2+self.n_zs*self.n_pv].reshape(-1,self.n_zs,self.n_pv,1)
+        ret += jnp.sum(
+            term_g*jnp.expand_dims(pv, 1), 
+            axis=-2
+        ) # (n,m,3)     
+     
+        y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3) 
+        term_y = out[:,self.n_zs**2+self.n_zs*self.n_pv:].reshape(-1,self.n_zs,1)
+        ret += jnp.sum(
+            term_y*jnp.expand_dims(y, 1), 
+            axis=-1,
+            keepdims=True
+        ) # (n,m,1)  
+        
+        return ret.reshape(-1, self.n_zs*3)  
+ 
 @export
 class DimensionlessDP(object):
     def __init__(self): 
