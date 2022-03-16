@@ -15,8 +15,6 @@ import numpy as np
 from functools import partial
 from itertools import islice
 import pickle
-from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
-from emlp.reps import T,Scalar
 from .classifier import Regressor,Classifier
 #from emlp_jax.model_trainer import RegressorPlus
 
@@ -37,7 +35,7 @@ def symplectic_form(z):
     q, p = unpack(z)
     return pack(p, -q)
 
-def hamiltonian_dynamics(hamiltonian, z,t,zp):
+def hamiltonian_dynamics(hamiltonian, z,t,pv=None,ps=None):
     """ 
     Takes 
     - a Hamiltonian function, 
@@ -49,29 +47,29 @@ def hamiltonian_dynamics(hamiltonian, z,t,zp):
     # Differentiate `hamiltonian` with respect to the first positional argument
     # by default, argnums = 0 
     grad_h = grad(hamiltonian) # ∇H 
-    gh = grad_h(z, zp) # ∇H(z)
+    gh = grad_h(z, pv, ps) # ∇H(z)
     return symplectic_form(gh) # J∇H(z)
 
-def HamiltonianFlow(H,z0,T,zp):
+def HamiltonianFlow(H,z0,T,pv=None,ps=None):
     """ Converts a Hamiltonian H and initial conditions z0,
-        as well as other parameters zp (g, m1, k1, l2, m2, k2, l2)
+        as well as other parameters pv <g> and ps <m1, k1, l2, m2, k2, l2>
         to rolled out trajectory at time points T.
         z0 shape (state_dim,) and T shape (t,) yields (t,state_dim) rollout."""
-    dynamics = lambda z,t,zp: hamiltonian_dynamics(H,z,t,zp)
-    return odeint(dynamics, z0, T, zp, rtol=1e-7, atol=1e-7)#.transpose((1,0,2))
+    dynamics = lambda z,t,pv,ps: hamiltonian_dynamics(H,z,t,pv,ps)
+    return odeint(dynamics, z0, T, pv, ps, rtol=1e-7, atol=1e-7)#.transpose((1,0,2))
 
-def BHamiltonianFlow(H,z0,T,zp,tol=1e-7):
+def BHamiltonianFlow(H,z0,T,pv=None,ps=None,tol=1e-7):
     """ Batched version of HamiltonianFlow, essentially equivalent to vmap(HamiltonianFlow),
         z0 of shape (bs,state_dim) and T of shape (t,) yields (bs,t,state_dim) rollouts """
-    dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None,0)))
-    return odeint(dynamics, z0, T, zp, rtol=tol).transpose((1,0,2))
+    dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None,0,0)))
+    return odeint(dynamics, z0, T, pv, ps, rtol=tol).transpose((1,0,2))
 
-def BOdeFlow(dynamics,z0,T,zp,tol=1e-7):
+def BOdeFlow(dynamics,z0,T,pv=None,ps=None,tol=1e-7):
     """ Batched integration of ODE dynamics into rollout trajectories.
         Given dynamics (state_dim->state_dim) and z0 of shape (bs,state_dim)
         and T of shape (t,) outputs trajectories (bs,t,state_dim) """
-    dynamics = jit(vmap(jit(dynamics),(0,None,0)))
-    return odeint(dynamics, z0, T, zp, rtol=tol).transpose((1,0,2))
+    dynamics = jit(vmap(jit(dynamics),(0,None,0,0)))
+    return odeint(dynamics, z0, T, pv, ps, rtol=tol).transpose((1,0,2))
 
 class HamiltonianDataset(Dataset):
     """ A dataset that generates trajectory chunks from integrating the Hamiltonian dynamics
@@ -87,7 +85,6 @@ class HamiltonianDataset(Dataset):
                 the total integration time from which each trajectory chunk is randomly sampled
             regen (bool): whether or not to regenerate and overwrite any datasets cached to disk
                 with the same arguments. If false, will use trajectories saved at {filename}
-
         Returns:
             Dataset: A (torch style) dataset.  """
     def __init__(
@@ -109,17 +106,18 @@ class HamiltonianDataset(Dataset):
         )
 
         if os.path.exists(filename) and not regen:
-            Zs, ZPs = torch.load(filename)
+            Zs, PVs, PSs = torch.load(filename)
         else:
-            zs, ZPs = self.generate_trajectory_data(
+            zs, PVs, PSs = self.generate_trajectory_data(
                 n_systems, dt, integration_time, changedist, rescaleKG, scale
             )
             Zs = np.asarray(self.chunk_training_data(zs, chunk_len))
             os.makedirs(root_dir, exist_ok=True)
-            torch.save((Zs, ZPs), filename)
+            torch.save((Zs, PVs, PSs), filename)
         
         self.Zs = Zs
-        self.ZPs = ZPs
+        self.PVs = PVs
+        self.PSs = PSs
         self.T = np.asarray(jnp.arange(0, chunk_len*dt, dt))
         self.T_long = np.asarray(jnp.arange(0,integration_time,dt))
 
@@ -127,10 +125,10 @@ class HamiltonianDataset(Dataset):
         return self.Zs.shape[0]
 
     def __getitem__(self, i):
-        return (self.Zs[i, 0], self.ZPs[i], self.T), self.Zs[i]
+        return (self.Zs[i, 0], self.PVs[i], self.PSs[i], self.T), self.Zs[i]
 
-    def integrate(self,z0s,zps,ts):
-        return HamiltonianFlow(self.H_wrap(zps), z0s, ts) # HamiltonianFlow(self.H, z0s, ts)
+    def integrate(self, z0s, pv, ps, ts):
+        return HamiltonianFlow(self.H, z0s, ts, pv, ps)
     
     def generate_trajectory_data(
         self, 
@@ -152,7 +150,7 @@ class HamiltonianDataset(Dataset):
         n_gen = 0; bs = min(bs, n_systems)
         t_batches, z_batches = [], []
         ## generate parameters
-        zps = self.sample_parameters(
+        pv, ps = self.sample_parameters(
             n_systems,  
             changedist,
             rescaleKG,  
@@ -171,12 +169,13 @@ class HamiltonianDataset(Dataset):
                 self.H, 
                 z0s, 
                 ts,
-                zps[n_gen:n_gen+bs]
+                pv[n_gen:n_gen+bs],
+                ps[n_gen:n_gen+bs]
             ) # new_zs = BHamiltonianFlow(self.H,z0s,ts)
             z_batches.append(new_zs)
             n_gen += bs
         zs = jnp.concatenate(z_batches, axis=0)[:n_systems]
-        return zs, zps
+        return zs, pv, ps
 
     def chunk_training_data(self, zs, chunk_len):
         batch_size, traj_len, *z_dim = zs.shape
@@ -198,13 +197,13 @@ class HamiltonianDataset(Dataset):
         """ Parameters """
         raise NotImplementedError
 
-    def animate(self, zt=None, zpt=None):
+    def animate(self, zt=None, pvt=None, pst=None):
         """ Visualize the dynamical system, or given input trajectories.
             Usage:  from IPython.display import HTML
                     HTML(dataset.animate())"""
         if zt is None:
-            zpt = self.sample_parameters(10)
-            zt = np.asarray(self.integrate(self.sample_initial_conditions(10)[0],zpt,self.T_long))
+            pvt = self.sample_parameters(10)
+            zt = np.asarray(self.integrate(self.sample_initial_conditions(10)[0],pvt,pst,self.T_long))
         
         # bs, T, 2nd
         if len(zt.shape) == 3:
@@ -215,33 +214,15 @@ class HamiltonianDataset(Dataset):
         anim = self.animator(xt)
         return anim.animate()
 
-class SHO(HamiltonianDataset):
-    """ A basic simple harmonic oscillator"""
-    def H(self,z,c):
-        ke = (z[...,1]**2).sum()/2
-        pe = (z[...,0]**2).sum()/2
-        return ke+pe 
-    def sample_initial_conditions(self,bs, changedist=False, rescaleKG=False, scale=None):
-        return np.random.randn(bs,2)
-    def sample_parameters(self, bs, changedist=False, rescaleKG=False, scale=None):
-        return  
-    
     
 class DoubleSpringPendulum(HamiltonianDataset):
     """ The double spring pendulum dataset described in the paper."""
-    def __init__(self,*args,**kwargs):
-        super().__init__(*args,**kwargs)
-        self.rep_in = 4*T(1)#Vector
-        self.rep_out = T(0)#Scalar
-        self.symmetry = O2eR3()
-        self.stats = (0,1,0,1)
-        
 
-    def H(self,z,zp):
-        g = zp[...,:3]
-        m1,m2 = zp[...,3], zp[...,4]
-        k1,k2 = zp[...,5], zp[...,6]
-        l1,l2 = zp[...,7], zp[...,8] 
+    def H(self,z,pv,ps):
+        g = pv
+        m1,m2 = ps[...,0], ps[...,1]
+        k1,k2 = ps[...,2], ps[...,3]
+        l1,l2 = ps[...,4], ps[...,5] 
         
         x,p = unpack(z)
         p1,p2 = unpack(p)
@@ -275,7 +256,7 @@ class DoubleSpringPendulum(HamiltonianDataset):
         l2 = np.random.uniform(1,upper,(bs,))
         
         mkl = np.stack([m1, m2, k1, k2, l1, l2], axis=-1) # (bs, 6)  
-        return np.concatenate([g, mkl], axis=-1) # (bs, 9)
+        return g, mkl # (bs, 3) (bs, 9)
        
     def sample_initial_conditions(
         self,
@@ -300,9 +281,6 @@ class DoubleSpringPendulum(HamiltonianDataset):
     def animator(self):
         return CoupledPendulumAnimation
 
-
-
-
 class IntegratedDynamicsTrainer(Regressor):
     """ A trainer for training the Hamiltonian Neural Networks. Feel free to use your own instead."""
     def __init__(self,model,*args,**kwargs):
@@ -312,9 +290,8 @@ class IntegratedDynamicsTrainer(Regressor):
     
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
-        (z0, zps, ts), true_zs = minibatch  
-        # pred_zs = BHamiltonianFlow(self.model,z0,ts[0])
-        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],zps) # (n,T,12)
+        (z0, pv, ps, ts), true_zs = minibatch  
+        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],pv,ps) # (n,T,12)
          
         return jnp.mean((pred_zs - true_zs)**2)
 
@@ -346,9 +323,8 @@ class IntegratedODETrainer(Regressor):
 
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
-        (z0, zps, ts), true_zs = minibatch
-        # pred_zs = BOdeFlow(self.model,z0,ts[0])
-        pred_zs = BOdeFlow(self.model,z0,ts[0],zps)
+        (z0, pv, ps, ts), true_zs = minibatch 
+        pred_zs = BOdeFlow(self.model,z0,ts[0],pv,ps)
         return jnp.mean((pred_zs - true_zs)**2)
 
     def metrics(self, loader):
@@ -361,54 +337,90 @@ class IntegratedODETrainer(Regressor):
         self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)
 
+class GeneralDynamicsTrainer(Regressor):
+    """ A trainer for training the Hamiltonian Neural Networks. Feel free to use your own instead."""
+    def __init__(self,model,*args,**kwargs):
+        super().__init__(model,*args,**kwargs)
+        self.loss = objax.Jit(self.loss,model.vars())
+        self.gradvals = objax.Jit(objax.GradValues(self.loss,model.vars()))
+
+    def loss(self, minibatch):
+        """ Standard cross-entropy loss """
+        (z0,pv,ps,ts),true_zs = minibatch
+        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],ps,pv)
+        return jnp.mean((pred_zs - true_zs)**2)
+
+    def metrics(self, loader):
+        mse = lambda mb: np.asarray(self.loss(mb))
+        return {"MSE": self.evalAverageMetrics(loader, mse)}
+    
+    def logStuff(self, step, minibatch=None):
+        loader = self.dataloaders['test']
+        metrics = {'test_Rollout': np.exp(
+            self.evalAverageMetrics(
+                loader,
+                partial(log_rollout_error_general,loader.dataset,self.model)
+            )
+        )}
+        self.logger.add_scalars('metrics', metrics, step)
+        super().logStuff(step,minibatch)
+
 def rel_err(a,b):
     """ Relative error |a-b|/|a+b|"""
     return jnp.sqrt(((a-b)**2).mean())/(jnp.sqrt((a**2).mean())+jnp.sqrt((b**2).mean()))#
+
+def log_rollout_error_general(model,minibatch):
+    """ Computes the log of the geometric mean of the rollout
+        error computed between the dataset ds and HNN model
+        on the initial condition in the minibatch."""
+    (z0,pv,ps,ts),gt_zs = minibatch
+    pred_zs = BHamiltonianFlow(model,z0,ts[0],pv,ps)
+    errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
+    clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
+    log_geo_mean = jnp.log(clamped_errs).mean()
+    return log_geo_mean
 
 def log_rollout_error(ds,model,minibatch):
     """ Computes the log of the geometric mean of the rollout
         error computed between the dataset ds and HNN model
         on the initial condition in the minibatch."""
-    (z0, zps, _), _ = minibatch
-    # pred_zs = BHamiltonianFlow(model,z0,ds.T_long)
-    pred_zs = BHamiltonianFlow(model,z0,ds.T_long,zps)
-    # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps)
+    (z0,pv,ps,_),_ = minibatch
+    pred_zs = BHamiltonianFlow(model,z0,ds.T_long,pv,ps)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps)
+    errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
+    clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
+    log_geo_mean = jnp.log(clamped_errs).mean()
+    return log_geo_mean
+
+def log_rollout_error_ode(ds,model,minibatch):
+    """ Computes the log of the geometric mean of the rollout
+        error computed between the dataset ds and NeuralODE model
+        on the initial condition in the minibatch."""
+    (z0,pv,ps,_), _ = minibatch 
+    pred_zs = BOdeFlow(model,z0,ds.T_long,pv,ps) 
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps)
     errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
     clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
     log_geo_mean = jnp.log(clamped_errs).mean()
     return log_geo_mean
 
 def pred_and_gt(ds,model,minibatch):
-    (z0, zps, _), _ = minibatch
-    # pred_zs = BHamiltonianFlow(model,z0,ds.T_long,tol=2e-6)
-    pred_zs = BHamiltonianFlow(model,z0,ds.T_long,zps,tol=2e-6)
-    # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps,tol=2e-6)
+    (z0, pv, ps, _), _ = minibatch
+    pred_zs = BHamiltonianFlow(model,z0,ds.T_long,pv,ps,tol=2e-6)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
-
-
-def log_rollout_error_ode(ds,model,minibatch):
-    """ Computes the log of the geometric mean of the rollout
-        error computed between the dataset ds and NeuralODE model
-        on the initial condition in the minibatch."""
-    (z0, zps, _), _ = minibatch
-    # pred_zs = BOdeFlow(model,z0,ds.T_long)
-    pred_zs = BOdeFlow(model,z0,ds.T_long,zps)
-    # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps)
-    errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
-    clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
-    log_geo_mean = jnp.log(clamped_errs).mean()
-    return log_geo_mean
 
 def pred_and_gt_ode(ds,model,minibatch):
-    (z0, zps, _), _ = minibatch
-    # pred_zs = BOdeFlow(model,z0,ds.T_long,tol=2e-6)
-    pred_zs = BOdeFlow(model,z0,ds.T_long,zps,tol=2e-6)
-    # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps,tol=2e-6)
+    (z0,pv,ps,_), _ = minibatch 
+    pred_zs = BOdeFlow(model,z0,ds.T_long,pv,ps,tol=2e-6) 
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
+
+def pred_and_gt_general(model,minibatch): 
+    (z0,pv,ps,ts),gt_zs = minibatch
+    pred_zs = BHamiltonianFlow(model,z0,ts[0],pv,ps,tol=2e-6)
+    return np.stack([pred_zs,gt_zs],axis=-1)
+
 
 
 
@@ -552,67 +564,7 @@ class CoupledPendulumAnimation(PendulumAnimation):
 
 from collections.abc import Iterable
 
-@export
-class hnn_trial(object):
-    """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
-        Feel free to use your own."""
-    def __init__(self,make_trainer,strict=True):
-        self.make_trainer = make_trainer
-        self.strict=strict
-    def __call__(self,cfg,i=None):
-        try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            if i is not None:
-                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
-            trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
-            trainer.train(cfg['num_epochs'])
-            if save: cfg['saved_at']=trainer.save_checkpoint()
-            outcome = trainer.ckpt['outcome']
-            trajectories = []
-            for mb in trainer.dataloaders['test']:
-                trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"./{cfg['network']}_{cfg['net_config']['group']}_{i}.t")
-        except Exception as e:
-            if self.strict: raise
-            outcome = e
-        del trainer
-        return cfg, outcome
 
-
-@export
-class ode_trial(object):
-    """ A training trial for the Neural ODEs, contains lots of boiler plate which is not necessary.
-        Feel free to use your own."""
-    def __init__(self,make_trainer,strict=True):
-        self.make_trainer = make_trainer
-        self.strict=strict
-    def __call__(self,cfg,i=None):
-        try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            if i is not None:
-                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
-            trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
-            trainer.train(cfg['num_epochs'])
-            if save: cfg['saved_at']=trainer.save_checkpoint()
-            outcome = trainer.ckpt['outcome']
-            trajectories = []
-            for mb in trainer.dataloaders['test']:
-                trajectories.append(pred_and_gt_ode(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"./{cfg['network']}_{cfg['net_config']['group']}_{i}.t") 
-        except Exception as e:
-            if self.strict: raise
-            outcome = e
-        del trainer
-        return cfg, outcome
-    
 @export
 class odeScalars_trial(object):
     """ A training trial for the Neural ODEs, contains lots of boiler plate which is not necessary.
@@ -688,3 +640,41 @@ class hnnScalars_trial(object):
         del trainer
         return cfg, outcome
 
+
+@export
+class hnnScalarsGeneral_trial(object):
+    """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
+        Feel free to use your own."""
+    def __init__(self,make_trainer,strict=True):
+        self.make_trainer = make_trainer
+        self.strict=strict
+    def __call__(self,cfg):
+        try:
+            cfg.pop('local_rank',None) #TODO: properly handle distributed
+            resume = cfg.pop('resume',False)
+            save = cfg.pop('save',False)
+            i=cfg['trial']
+            orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
+            cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
+            trainer = self.make_trainer(**cfg)
+            trainer.logger.add_scalars('config',flatten_dict(cfg))
+            trainer.train(cfg['num_epochs']) 
+            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_n{cfg['ndata']}_{cfg['transformer_config']}_{i}"
+            if save:
+                # Pickling
+                pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
+                 
+            outcome = trainer.ckpt['outcome']
+            # we could have more than one test sets
+            testname_all = [s for s in trainer.dataloaders.keys() if s not in ['val', 'train', 'Train']]
+            for testname in testname_all:
+                trajectories = []
+                for mb in trainer.dataloaders[testname]:
+                    trajectories.append(pred_and_gt_general(trainer.dataloaders[testname].dataset,trainer.model,mb))
+                torch.save(np.concatenate(trajectories), savefilename_prefix+"_traj_"+testname+".t")
+                
+        except Exception as e:
+            if self.strict: raise
+            outcome = e
+        del trainer
+        return cfg, outcome
