@@ -41,5 +41,5 @@ def makeTrainerScalars(*,num_epochs=100,seed=2022,
 
 if __name__ == "__main__":
     Trial = hnnScalarsKnown_trial(makeTrainerScalars)
-    cfg,outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__,namespace=(emlp.groups,emlp.nn)))
+    cfg,outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__))
     print(outcome)
