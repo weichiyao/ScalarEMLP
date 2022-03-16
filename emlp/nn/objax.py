@@ -503,4 +503,39 @@ class EquivarianceLayer_objax(Module):
         return out.reshape(-1, 12) #(n,12)
  
 
+@export
+class InvarianceKnown(Module):
+    def __init__(
+        self,  
+        n_hidden, 
+        n_layers, 
+    ):
+        super().__init__()
+        self.mlp = BasicMLP_objax(
+            n_in=6, n_out=1, n_hidden=n_hidden, n_layers=n_layers
+        ) 
+
+    def comp_scalars(self, x, take_sqrt=True):
+        """
+        INPUT: batch (q, p)
+        N: number of datasets
+        dim: dimension  
+        x: numpy tensor of size [N, 2, dim] 
+        """ 
+        n = x.shape[0]
+        scalars = jnp.einsum('bix,bjx->bij', x, x).reshape(n, -1)  
+        if take_sqrt:
+            xxsqrt = jnp.sqrt(jnp.einsum('bix,bix->bi', x, x))  
+            scalars = jnp.concatenate([xxsqrt, scalars], axis = -1)   
+        return scalars  
+    
+    def H(self, x):  
+        scalars = self.comp_scalars(x)
+        out = self.mlp(scalars)
+        return out.sum()  
+    
+    def __call__(self, x):
+        x = x.reshape(-1,2,3)
+        return self.H(x)
+
      
