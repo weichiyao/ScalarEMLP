@@ -14,6 +14,7 @@ from torch.utils.data import Dataset
 import numpy as np 
 from functools import partial
 from itertools import islice
+import pickle
 
 from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
 from emlp.reps import T,Scalar
@@ -187,6 +188,79 @@ class DoubleSpringPendulum(HamiltonianDataset):
     @property
     def animator(self):
         return CoupledPendulumAnimation
+
+class MakeDataset(Dataset):
+    def __init__(self, zs, t):
+        self.zs = zs 
+        self.t = t 
+
+    def __len__(self):
+        return self.zs.shape[0]
+
+    def __getitem__(self, i):
+        return (self.zs[i, 0], self.t[i]), self.zs[i]
+
+class KnownData(object):
+    def __init__(
+        self,
+        datasource,
+        itest=[1],
+        chunk_len=5,
+        ntrain_out=None
+    ):
+        super().__init__()
+        with open(datasource, 'rb') as handle:
+            ret = pickle.load(handle)
+        
+        # Split the train and test dataset 
+        ndata = ret.shape[0]
+        ntest = len(itest)
+        mask_test = np.full((ndata,),False)
+        mask_test[itest] = True
+        
+        train_data = self.chunk_training_data(
+            ret[~mask_test], 
+            chunk_len=chunk_len,
+            ntrain_out=ntrain_out
+        ) # (batch_size, chunk_len, 7)
+        test_data = ret[mask_test] # (batch_size, 90, 7)
+        
+        # Make Dataset
+        self.trainset = MakeDataset(train_data[:,:,1:], train_data[:,:,0])
+        self.testset = MakeDataset(test_data[:,:,1:], test_data[:,:,0])
+
+    def __call__(self):
+        return {"train": self.trainset, "val": self.testset, "test": self.testset}
+     
+    def chunk_training_data(self, zs, chunk_len=5, ntrain_out=None): 
+        """
+        if n_out is not specified  
+          we simply cut each full traj into consecutive pieces of size (chunk_len,)
+          total number of output training data = n_chunks * batch_size
+        otherwise: 
+          randomly select starting point in each full traj to cut 
+          total number of output training data = n_out
+          note: n_out // batch_size < traj_len - chunk_len
+        """
+        batch_size, traj_len, *z_dim = zs.shape
+        
+        if ntrain_out is None:
+            n_chunks = traj_len // chunk_len
+            chunked_zs = np.concatenate(np.split(zs, n_chunks, axis=1), axis=0) 
+        else:
+            n_each = ntrain_out // batch_size
+            start = np.stack(
+                [np.random.choice(traj_len-chunk_len, (n_each,), replace=False) 
+                 for _ in range(batch_size)], 
+                axis=0
+            )
+            take = np.repeat(start, chunk_len).reshape(batch_size,n_each,chunk_len) 
+            take += np.tile(np.arange(chunk_len),n_each).reshape(n_each,chunk_len)
+            chunked_zs = np.concatenate(
+                [zs[ii][take[ii]] for ii in range(batch_size)],
+                axis = 0
+            )
+        return chunked_zs
 
 
 
