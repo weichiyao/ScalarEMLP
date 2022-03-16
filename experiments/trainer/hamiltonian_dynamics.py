@@ -241,6 +241,34 @@ class IntegratedODETrainer(Regressor):
         self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)
 
+class KnownDynamicsTrainer(Regressor):
+    """ A trainer for training the Hamiltonian Neural Networks. """
+    def __init__(self,model,*args,**kwargs):
+        super().__init__(model,*args,**kwargs)
+        self.loss = objax.Jit(self.loss,model.vars())
+        self.gradvals = objax.Jit(objax.GradValues(self.loss,model.vars()))
+
+    def loss(self, minibatch):
+        """ Standard cross-entropy loss """
+        (z0, ts), true_zs = minibatch
+        pred_zs = BHamiltonianFlow(self.model,z0,ts[0])
+        return jnp.mean((pred_zs - true_zs)**2)
+
+    def metrics(self, loader):
+        mse = lambda mb: np.asarray(self.loss(mb))
+        return {"MSE": self.evalAverageMetrics(loader, mse)}
+    
+    def logStuff(self, step, minibatch=None):
+        loader = self.dataloaders['test']
+        metrics = {'test_Rollout': np.exp(
+            self.evalAverageMetrics(
+                loader,
+                partial(log_rollout_error_known,loader.dataset,self.model)
+            )
+        )}
+        self.logger.add_scalars('metrics', metrics, step)
+        super().logStuff(step,minibatch)
+        
 def rel_err(a,b):
     """ Relative error |a-b|/|a+b|"""
     return jnp.sqrt(((a-b)**2).mean())/(jnp.sqrt((a**2).mean())+jnp.sqrt((b**2).mean()))#
@@ -256,6 +284,8 @@ def log_rollout_error(ds,model,minibatch):
     clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
     log_geo_mean = jnp.log(clamped_errs).mean()
     return log_geo_mean
+   
+
 
 def pred_and_gt(ds,model,minibatch):
     (z0, _), _ = minibatch
@@ -263,7 +293,12 @@ def pred_and_gt(ds,model,minibatch):
     gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
 
-
+def pred_and_gt_known(model,minibatch):
+    (z0, ts), gt_zs = minibatch
+    pred_zs = BHamiltonianFlow(model,z0,ts[0],tol=2e-6) 
+    return np.stack([pred_zs,gt_zs],axis=-1)
+   
+   
 def log_rollout_error_ode(ds,model,minibatch):
     """ Computes the log of the geometric mean of the rollout
         error computed between the dataset ds and NeuralODE model
@@ -283,7 +318,16 @@ def pred_and_gt_ode(ds,model,minibatch):
     return np.stack([pred_zs,gt_zs],axis=-1)
 
 
-
+def log_rollout_error_known(ds,model,minibatch):
+    """ Computes the log of the geometric mean of the rollout
+        error computed between the dataset ds and HNN model
+        on the initial condition in the minibatch."""
+    (z0, ts), gt_zs = minibatch
+    pred_zs = BHamiltonianFlow(model,z0,ts[0])
+    errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
+    clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
+    log_geo_mean = jnp.log(clamped_errs).mean()
+    return log_geo_mean
 
 
 
@@ -532,6 +576,28 @@ class hnnScalars_trial(object):
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
+            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_{i}.t")
+        except Exception as e:
+            if self.strict: raise
+            outcome = e
+        del trainer
+        return cfg, outcome
+
+@export
+class hnnScalarsKnown_trial(object):
+    """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
+        Feel free to use your own."""
+    def __init__(self,make_trainer,strict=True):
+        self.make_trainer = make_trainer
+        self.strict=strict
+    def __call__(self,cfg,i=None):
+        try:
+            trainer = self.make_trainer(**cfg)
+            trainer.train(cfg['num_epochs'])
+            outcome = trainer.ckpt['outcome']
+            trajectories = []
+            for mb in trainer.dataloaders['test']:
+                trajectories.append(pred_and_gt_known(trainer.model,mb))
             torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_{i}.t")
         except Exception as e:
             if self.strict: raise
