@@ -1,680 +1,848 @@
-import jax 
-from jax import grad, jit, vmap, jacfwd, jvp, vjp, random
-from jax.experimental.ode import odeint
+import jax
 import jax.numpy as jnp
+import jax.scipy.stats as jss
 import objax
-from oil.utils.utils import Named
-from oil.tuning.configGenerator import flatten_dict
-from oil.utils.utils import export
- 
-import os
-import torch 
-import torch.nn as nn
-from torch.utils.data import Dataset
-import numpy as np 
+import objax.nn as nn
+import objax.functional as F
+import numpy as np   
+from oil.utils.utils import Named,export  
+from objax.module import Module 
+from jax import jit,vmap
+from functools import lru_cache as cache
 from functools import partial
-from itertools import islice
-import pickle
-from .classifier import Regressor,Classifier
-#from emlp_jax.model_trainer import RegressorPlus
+import itertools  
 
-## Code to rollout a Hamiltonian system
+from typing import Callable, List
 
-def unpack(z):
-    D = jnp.shape(z)[-1]
-    assert D % 2 == 0
-    d = D//2
-    q, p_or_v = z[..., :d], z[..., d:]
-    return q, p_or_v
-
-def pack(q, p_or_v):
-    return jnp.concatenate([q, p_or_v], axis=-1)
-
-def symplectic_form(z):
-    """ Equivalent to multiplying z by the matrix J=[[0,I],[-I,0]]"""
-    q, p = unpack(z)
-    return pack(p, -q)
-
-def hamiltonian_dynamics(hamiltonian, z,t,pv=None,ps=None):
-    """ 
-    Takes 
-    - a Hamiltonian function, 
-    - a state vector z, 
-    - an unused time t,
-    - parameters zp including g, m1, k1, l2, m2, k2, l2
-    to compute the hamiltonian dynamics J∇H
-    """
-    # Differentiate `hamiltonian` with respect to the first positional argument
-    # by default, argnums = 0 
-    grad_h = grad(hamiltonian) # ∇H 
-    gh = grad_h(z, pv, ps) # ∇H(z)
-    return symplectic_form(gh) # J∇H(z)
-
-def HamiltonianFlow(H,z0,T,pv=None,ps=None):
-    """ Converts a Hamiltonian H and initial conditions z0,
-        as well as other parameters pv <g> and ps <m1, k1, l2, m2, k2, l2>
-        to rolled out trajectory at time points T.
-        z0 shape (state_dim,) and T shape (t,) yields (t,state_dim) rollout."""
-    dynamics = lambda z,t,pv,ps: hamiltonian_dynamics(H,z,t,pv,ps)
-    return odeint(dynamics, z0, T, pv, ps, rtol=1e-7, atol=1e-7)#.transpose((1,0,2))
-
-def BHamiltonianFlow(H,z0,T,pv=None,ps=None,tol=1e-7):
-    """ Batched version of HamiltonianFlow, essentially equivalent to vmap(HamiltonianFlow),
-        z0 of shape (bs,state_dim) and T of shape (t,) yields (bs,t,state_dim) rollouts """
-    dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None,0,0)))
-    return odeint(dynamics, z0, T, pv, ps, rtol=tol).transpose((1,0,2))
-
-def BOdeFlow(dynamics,z0,T,pv=None,ps=None,tol=1e-7):
-    """ Batched integration of ODE dynamics into rollout trajectories.
-        Given dynamics (state_dim->state_dim) and z0 of shape (bs,state_dim)
-        and T of shape (t,) outputs trajectories (bs,t,state_dim) """
-    dynamics = jit(vmap(jit(dynamics),(0,None,0,0)))
-    return odeint(dynamics, z0, T, pv, ps, rtol=tol).transpose((1,0,2))
-
-class HamiltonianDataset(Dataset):
-    """ A dataset that generates trajectory chunks from integrating the Hamiltonian dynamics
-        from a given Hamiltonian system and initial condition distribution.
-        Each element ds[i] = ((ic,T),z_target) where ic (state_dim,) are the initial conditions,
-        T are the evaluation timepoints, and z_target (T,state_dim) is the ground truth trajectory chunk.
-        Here state_dim includes both the position q and canonical momentum p concatenated together.
-        Args:
-            n_systems (int): total number of trajectory chunks that makeup the dataset.
-            chunk_len (int): the number of timepoints at which each chunk is evaluated
-            dt (float): the spacing of the evaluation points (not the integrator step size which is set by tol=1e-4)
-            integration_time (float): The integration time for evaluation rollouts and also
-                the total integration time from which each trajectory chunk is randomly sampled
-            regen (bool): whether or not to regenerate and overwrite any datasets cached to disk
-                with the same arguments. If false, will use trajectories saved at {filename}
-        Returns:
-            Dataset: A (torch style) dataset.  """
+def Sequential(*args):
+    """ Wrapped to mimic pytorch syntax"""
+    return nn.Sequential(args)
+ 
+def swish(x):
+    return jax.nn.sigmoid(x)*x
+ 
+@export
+class BasicMLP_objax(Module):
     def __init__(
-        self,
-        n_systems=100,
-        chunk_len=5,
-        dt=0.2,
-        integration_time=30,
-        changedist=False, 
-        rescaleKG=False,
-        scale=None,
-        regen=False 
+        self, 
+        n_in: int, 
+        n_out: int,
+        n_hidden: int = 100, 
+        n_layers: int = 2,
+        div: int = 2 
     ):
         super().__init__()
-        root_dir = os.path.expanduser(f"~/datasets/ODEDynamics/{self.__class__}/")
-        filename = os.path.join(
-            root_dir, 
-            f"trajectories_n{n_systems}_l{chunk_len}_dt{dt}_it{integration_time}_c{changedist}_r{rescaleKG}.pz"
-        )
-
-        if os.path.exists(filename) and not regen:
-            Zs, PVs, PSs = torch.load(filename)
-        else:
-            zs, PVs, PSs = self.generate_trajectory_data(
-                n_systems, dt, integration_time, changedist, rescaleKG, scale
-            )
-            Zs = np.asarray(self.chunk_training_data(zs, chunk_len))
-            os.makedirs(root_dir, exist_ok=True)
-            torch.save((Zs, PVs, PSs), filename)
+        layers = [nn.Linear(n_in, n_hidden), swish]
+        for _ in range(n_layers):
+            layers.append(nn.Linear(n_hidden, n_hidden//div))
+            layers.append(swish)
+            n_hidden //= div 
+        layers.append(nn.Linear(n_hidden, n_out))
         
-        self.Zs = Zs
-        self.PVs = PVs
-        self.PSs = PSs
-        self.T = np.asarray(jnp.arange(0, chunk_len*dt, dt))
-        self.T_long = np.asarray(jnp.arange(0,integration_time,dt))
-
-    def __len__(self):
-        return self.Zs.shape[0]
-
-    def __getitem__(self, i):
-        return (self.Zs[i, 0], self.PVs[i], self.PSs[i], self.T), self.Zs[i]
-
-    def integrate(self, z0s, pv, ps, ts):
-        return HamiltonianFlow(self.H, z0s, ts, pv, ps)
+        self.mlp = Sequential(*layers)
     
-    def generate_trajectory_data(
+    def __call__(self,x,training=True):
+        return self.mlp(x)
+
+ 
+@export
+class ScalarEMLP(Module, metaclass=Named):
+    """ Scalar Invariant MultiLayer Perceptron. 
+    Arguments 
+    -------
+    n_in : int
+        number of inputs to MLP
+    n_hidden: int
+        number of hidden units in MLP
+    n_layers: int
+        number of layers between input and output layers
+    div: int
+        scale the number of hidden units at each subsequent layer of MLP 
+    transformer: Callable
+        transformation attributes and functions
+          
+    Returns:
+    -------
+    Module: 
+        the ScalarMLP objax module.
+    """
+    def __init__(
         self, 
-        n_systems, 
-        dt, 
-        integration_time, 
-        changedist,
-        rescaleKG,
-        scale,
-        bs=100
-    ):
-        """ 
-        Returns ts: (n_systems, traj_len) zs: (n_systems, traj_len, z_dim)
-                zps: (n_systems, 9) = (g, (m1,k1,l1), (m2,k2,l2))
-        """
-        if not rescaleKG:
-            scale = np.ones((n_systems,))
-      
-        n_gen = 0; bs = min(bs, n_systems)
-        t_batches, z_batches = [], []
-        ## generate parameters
-        pv, ps = self.sample_parameters(
-            n_systems,  
-            changedist,
-            rescaleKG,  
-            scale
-        )
-        while n_gen < n_systems: 
-            ## generate positions and velocities 
-            z0s = self.sample_initial_conditions(
-                bs, 
-                changedist,
-                rescaleKG,
-                scale[n_gen:n_gen+bs]
-            ) 
-            ts = jnp.arange(0, integration_time, dt) 
-            new_zs = BHamiltonianFlow(
-                self.H, 
-                z0s, 
-                ts,
-                pv[n_gen:n_gen+bs],
-                ps[n_gen:n_gen+bs]
-            ) # new_zs = BHamiltonianFlow(self.H,z0s,ts)
-            z_batches.append(new_zs)
-            n_gen += bs
-        zs = jnp.concatenate(z_batches, axis=0)[:n_systems]
-        return zs, pv, ps
-
-    def chunk_training_data(self, zs, chunk_len):
-        batch_size, traj_len, *z_dim = zs.shape
-        n_chunks = traj_len // chunk_len
-        chunk_idx = np.random.randint(0, n_chunks, (batch_size,))
-        chunked_zs = np.stack(np.split(zs,n_chunks, axis=1))
-        chosen_zs = chunked_zs[chunk_idx, np.arange(batch_size)]
-        return chosen_zs
-
-    def H(self,z,zp):
-        """ The Hamiltonian function, depending on z=pack(q,p), zp=(g,m1,k1,g1,m2,k2,g2)"""
-        raise NotImplementedError 
-
-    def sample_initial_conditions(self,bs,changedist,rescaleKG,scale):
-        """ Initial condition distribution """
-        raise NotImplementedError
-
-    def sample_parameters(self,bs,changedist,rescaleKG,scale):
-        """ Parameters """
-        raise NotImplementedError
-
-    def animate(self, zt=None, pvt=None, pst=None):
-        """ Visualize the dynamical system, or given input trajectories.
-            Usage:  from IPython.display import HTML
-                    HTML(dataset.animate())"""
-        if zt is None:
-            pvt = self.sample_parameters(10)
-            zt = np.asarray(self.integrate(self.sample_initial_conditions(10)[0],pvt,pst,self.T_long))
-        
-        # bs, T, 2nd
-        if len(zt.shape) == 3:
-            j = np.random.randint(zt.shape[0])
-            zt = zt[j]
-        xt,pt = unpack(zt)
-        xt = xt.reshape((xt.shape[0],-1,3))
-        anim = self.animator(xt)
-        return anim.animate()
-
-    
-class DoubleSpringPendulum(HamiltonianDataset):
-    """ The double spring pendulum dataset described in the paper."""
-
-    def H(self,z,pv,ps):
-        g = pv
-        m1,m2 = ps[...,0], ps[...,1]
-        k1,k2 = ps[...,2], ps[...,3]
-        l1,l2 = ps[...,4], ps[...,5] 
-        
-        x,p = unpack(z)
-        p1,p2 = unpack(p)
-        x1,x2 = unpack(x)
-        ke = .5*(p1**2).sum(-1)/m1 + .5*(p2**2).sum(-1)/m2
-        pe = .5*k1*(jnp.sqrt((x1**2).sum(-1))-l1)**2 
-        pe += k2*(jnp.sqrt(((x1-x2)**2).sum(-1))-l2)**2
-        pe += -m1*jnp.sum(g*x1, axis=-1) - m2*jnp.sum(g*x2, axis=-1)
-        return (ke + pe).sum() 
-       
-    def sample_parameters(
-        self,
-        bs, 
-        changedist=False,
-        rescaleKG=False,
-        scale=None
+        n_hidden: int, 
+        n_layers: int,
+        div: int,
+        transformer: Callable, 
     ): 
-        if not rescaleKG:
-            scale = np.ones((bs,))
-        upper = 5 if changedist else 2
-        
-        g = np.random.normal(size=(bs, 3))    
-        ghat = g/np.linalg.norm(g, axis=-1, keepdims=True) # normalize 
-        g = ghat * np.random.uniform(1,2,(bs,1)) 
+        super().__init__()  
          
-        m1 = scale*np.random.uniform(1,upper,(bs,))
-        m2 = scale*np.random.uniform(1,upper,(bs,))
-        k1 = scale*np.random.uniform(1,upper,(bs,))
-        k2 = scale*np.random.uniform(1,upper,(bs,))
-        l1 = np.random.uniform(1,upper,(bs,))
-        l2 = np.random.uniform(1,upper,(bs,))
-        
-        mkl = np.stack([m1, m2, k1, k2, l1, l2], axis=-1) # (bs, 6)  
-        return g, mkl # (bs, 3) (bs, 9)
-       
-    def sample_initial_conditions(
-        self,
-        bs,
-        changedist=False, 
-        rescaleKG=False,
-        scale=None
-    ):
-        if not rescaleKG:
-            scale = np.ones((bs,))
-        
-        assert scale.shape[0] == bs
-        x1 = np.array([0,0,-1.5]) +.2*np.random.randn(bs,3)
-        x2 = np.array([0,0,-3.]) +.2*np.random.randn(bs,3)
-        
-        p = scale[:,None] * 0.4 * np.random.randn(bs,6)
-        
-        z0 = np.concatenate([x1,x2,p],axis=-1) # (bs, 12) 
-        return z0 
-    
-    @property
-    def animator(self):
-        return CoupledPendulumAnimation
+        n_in = transformer.n_features
+        self.transformer = transformer  
 
-class IntegratedDynamicsTrainer(Regressor):
-    """ A trainer for training the Hamiltonian Neural Networks. Feel free to use your own instead."""
-    def __init__(self,model,*args,**kwargs):
-        super().__init__(model,*args,**kwargs)
-        self.loss = objax.Jit(self.loss,model.vars())
-        self.gradvals = objax.Jit(objax.GradValues(self.loss,model.vars()))
+        self.mlp = BasicMLP_objax(
+            n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
+        )   
     
-    def loss(self, minibatch):
-        """ Standard cross-entropy loss """
-        (z0, pv, ps, ts), true_zs = minibatch  
-        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],pv,ps) # (n,T,12)
+    def H(self, x, pv=None, ps=None):  
+        scalars, _ = self.transformer(x,pv,ps)  
+        out = self.mlp(scalars)
+        return out.sum()  
+    
+    def __call__(self, x, pv=None, ps=None, training = True):
+        return self.H(x, pv, ps)
+
+@export
+class EquivarianceLayerGeneral(ScalarEMLP):
+    def __init__(
+        self, 
+        n_hidden: int, 
+        n_layers: int,
+        div: int,
+        transformer: Callable, 
+    ): 
+        super().__init__()  
          
-        return jnp.mean((pred_zs - true_zs)**2)
+        n_in = transformer.n_features
+        self.n_zs = transformer.n_zs
+        self.n_pv = transformer.n_pv
 
-    def metrics(self, loader):
-        mse = lambda mb: np.asarray(self.loss(mb))
-        return {"MSE": self.evalAverageMetrics(loader, mse)}
+        n_out = self.n_zs * (self.n_zs + self.n_pv) 
+        self.transformer = transformer  
+        self.mlp = BasicMLP_objax(
+            n_in=n_in, n_out=n_out, n_hidden=n_hidden, n_layers=n_layers, div=div
+        )   
+
+    def __call__(self, x, t, pv=None, ps=None):
+        scalars = self.transformer(x, pv, ps) # (n, n_in)
+        out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n, n_out, 1)
+        term_x = out[:,:self.n_zs**2].reshape(-1,self.n_zs,self.n_zs,1)
+        ret = jnp.sum(
+            term_x*jnp.expand_dims(x, 1), 
+            axis=-2
+        ) # (n,m,3)
+        if pv is not None:
+            term_v = out[:,self.n_zs**2:].reshape(-1,self.n_zs,self.n_pv,1)
+            ret += jnp.sum(
+                term_v*jnp.expand_dims(pv, 1), 
+                axis=-2
+            ) # (n,m,3)
     
-    def logStuff(self, step, minibatch=None):
-        # we could have more than one test sets
-        testname_all = [s for s in self.dataloaders.keys() if s not in ['val', 'train', 'Train']]
-        printname_all = [s+'_Rollout' for s in testname_all]
-        for i in range(len(testname_all)):
-            loader = self.dataloaders[testname_all[i]]
-            metrics = np.exp(self.evalAverageMetrics(
-                loader, partial(log_rollout_error, loader.dataset, self.model)
-            ))
-            metrics = {printname_all[i]: metrics} 
-            self.logger.add_scalars('metrics', metrics, step)
-        super().logStuff(step,minibatch)
+        return ret.reshape(-1, self.n_zs*3)  
 
-class IntegratedODETrainer(Regressor):
-    """ A trainer for training the Neural ODEs. Feel free to use your own instead."""
-    def __init__(self,model,*args,**kwargs):
-        super().__init__(model,*args,**kwargs)
-        self.loss = objax.Jit(self.loss, model.vars())
-        #self.model = objax.Jit(self.model)
-        self.gradvals = objax.Jit(objax.GradValues(self.loss, model.vars()))#objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
-        #self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
-
-    def loss(self, minibatch):
-        """ Standard cross-entropy loss """
-        (z0, pv, ps, ts), true_zs = minibatch 
-        pred_zs = BOdeFlow(self.model,z0,ts[0],pv,ps)
-        return jnp.mean((pred_zs - true_zs)**2)
-
-    def metrics(self, loader):
-        mse = lambda mb: np.asarray(self.loss(mb))
-        return {"MSE": self.evalAverageMetrics(loader, mse)}
+@export  
+class InvarianceLayerGeneral(ScalarEMLP):
+    def __init__( 
+        self, 
+        n_hidden: int, 
+        n_layers: int,
+        div: int,
+        transformer: Callable, 
+    ):   
+        n_in = transformer.n_features
+        self.transformer = transformer  
         
-    def logStuff(self, step, minibatch=None):
-        loader = self.dataloaders['test']
-        metrics = {'test_Rollout': np.exp(self.evalAverageMetrics(loader,partial(log_rollout_error_ode,loader.dataset,self.model)))} 
-        self.logger.add_scalars('metrics', metrics, step)
-        super().logStuff(step,minibatch)
+        self.mlp = BasicMLP_objax(
+            n_in=n_in, 
+            n_out=1, 
+            n_hidden=n_hidden, 
+            n_layers=n_layers, 
+            div=div
+        )    
 
-class GeneralDynamicsTrainer(Regressor):
-    """ A trainer for training the Hamiltonian Neural Networks. Feel free to use your own instead."""
-    def __init__(self,model,*args,**kwargs):
-        super().__init__(model,*args,**kwargs)
-        self.loss = objax.Jit(self.loss,model.vars())
-        self.gradvals = objax.Jit(objax.GradValues(self.loss,model.vars()))
-
-    def loss(self, minibatch):
-        """ Standard cross-entropy loss """
-        (z0,pv,ps,ts),true_zs = minibatch
-        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],ps,pv)
-        return jnp.mean((pred_zs - true_zs)**2)
-
-    def metrics(self, loader):
-        mse = lambda mb: np.asarray(self.loss(mb))
-        return {"MSE": self.evalAverageMetrics(loader, mse)}
+    def H(self, x, pv=None, ps=None):  
+        scalars = self.transformer(x, pv, ps)  
+        out = self.mlp(scalars)  
+        return out.sum()  
     
-    def logStuff(self, step, minibatch=None):
-        loader = self.dataloaders['test']
-        metrics = {'test_Rollout': np.exp(
-            self.evalAverageMetrics(
-                loader,
-                partial(log_rollout_error_general,loader.dataset,self.model)
-            )
-        )}
-        self.logger.add_scalars('metrics', metrics, step)
-        super().logStuff(step,minibatch)
+    def __call__(self, x, pv=None, ps=None, training = True):
+        return self.H(x, pv, ps)
+ 
 
-def rel_err(a,b):
-    """ Relative error |a-b|/|a+b|"""
-    return jnp.sqrt(((a-b)**2).mean())/(jnp.sqrt((a**2).mean())+jnp.sqrt((b**2).mean()))#
-
-def log_rollout_error_general(model,minibatch):
-    """ Computes the log of the geometric mean of the rollout
-        error computed between the dataset ds and HNN model
-        on the initial condition in the minibatch."""
-    (z0,pv,ps,ts),gt_zs = minibatch
-    pred_zs = BHamiltonianFlow(model,z0,ts[0],pv,ps)
-    errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
-    clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
-    log_geo_mean = jnp.log(clamped_errs).mean()
-    return log_geo_mean
-
-def log_rollout_error(ds,model,minibatch):
-    """ Computes the log of the geometric mean of the rollout
-        error computed between the dataset ds and HNN model
-        on the initial condition in the minibatch."""
-    (z0,pv,ps,_),_ = minibatch
-    pred_zs = BHamiltonianFlow(model,z0,ds.T_long,pv,ps)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps)
-    errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
-    clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
-    log_geo_mean = jnp.log(clamped_errs).mean()
-    return log_geo_mean
-
-def log_rollout_error_ode(ds,model,minibatch):
-    """ Computes the log of the geometric mean of the rollout
-        error computed between the dataset ds and NeuralODE model
-        on the initial condition in the minibatch."""
-    (z0,pv,ps,_), _ = minibatch 
-    pred_zs = BOdeFlow(model,z0,ds.T_long,pv,ps) 
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps)
-    errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
-    clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
-    log_geo_mean = jnp.log(clamped_errs).mean()
-    return log_geo_mean
-
-def pred_and_gt(ds,model,minibatch):
-    (z0, pv, ps, _), _ = minibatch
-    pred_zs = BHamiltonianFlow(model,z0,ds.T_long,pv,ps,tol=2e-6)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps,tol=2e-6)
-    return np.stack([pred_zs,gt_zs],axis=-1)
-
-def pred_and_gt_ode(ds,model,minibatch):
-    (z0,pv,ps,_), _ = minibatch 
-    pred_zs = BOdeFlow(model,z0,ds.T_long,pv,ps,tol=2e-6) 
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps,tol=2e-6)
-    return np.stack([pred_zs,gt_zs],axis=-1)
-
-def pred_and_gt_general(model,minibatch): 
-    (z0,pv,ps,ts),gt_zs = minibatch
-    pred_zs = BHamiltonianFlow(model,z0,ts[0],pv,ps,tol=2e-6)
-    return np.stack([pred_zs,gt_zs],axis=-1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### Some extra code to make pretty visualizations for the given system
-
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.animation as animation
-import numpy as np
-
-class Animation(object):
-    def __init__(self, qt,lims=None,traj_lw=1,figkwargs={}):
-        """ [qt (T,n,d)"""
-        self.qt = qt
-        T,n,d = qt.shape
-        assert d in (2,3), "too many dimensions for animation"
-        self.fig = plt.figure(**figkwargs)
-        self.ax = self.fig.add_axes([0, 0, 1, 1],projection='3d') if d==3 else self.fig.add_axes([0, 0, 1, 1])
+@export  
+class InvarianceLayerDP(ScalarEMLP):
+    def __init__(
+        self, 
+        n_hidden: int, 
+        n_layers: int, 
+        div: int,
+        transformer: Callable, 
+    ):   
+        n_in = transformer.n_features
+        n_out = transformer.n_scaling
+        self.transformer = transformer  
         
-        #self.ax.axis('equal')
-        xyzmin = self.qt.min(0).min(0)#.min(dim=0)[0].min(dim=0)[0]
-        xyzmax = self.qt.max(0).max(0)#.max(dim=0)[0].max(dim=0)[0]
-        delta = xyzmax-xyzmin
-        lower = xyzmin-.1*delta; upper = xyzmax+.1*delta
-        if lims is None:
-            lims = (min(lower),max(upper)),(min(lower),max(upper)),(min(lower),max(upper))
-        self.ax.set_xlim(lims[0])
-        self.ax.set_ylim(lims[1])
-        if d==3: self.ax.set_zlim(lims[2])
-        if d!=3: self.ax.set_aspect("equal")
-        #elf.ax.auto_scale_xyz()
-        empty = d*[[]]
-        self.colors = np.random.choice([f"C{i}" for i in range(10)],size=n,replace=False)
-        self.objects = {
-            'pts':sum([self.ax.plot(*empty, "o", ms=6,color=self.colors[i]) for i in range(n)], []),
-            'traj_lines':sum([self.ax.plot(*empty, "-",color=self.colors[i],lw=traj_lw) for i in range(n)], []),
+        self.mlp = BasicMLP_objax(
+            n_in=n_in, 
+            n_out=n_out, 
+            n_hidden=n_hidden, 
+            n_layers=n_layers, 
+            div=div
+        )   
+    
+    def H(self, x, pv, ps):  
+        scalars, scaling = self.transformer(x,pv,ps)  
+        out = scaling * self.mlp(scalars)  
+        return out.sum()  
+    
+    def __call__(self, x, pv=None, ps=None, training=True):
+        return self.H(x, pv, ps)
+ 
+
+
+@export
+class DimensionlessDP(object):
+    def __init__(self): 
+        self.create_mapping()
+        self.h = jnp.array(self.h)
+        self.nh = jnp.array(self.nh) 
+    
+    def create_mapping(self):
+        self.nh = np.zeros((26,21),dtype=np.float32)
+        ## First group
+        self.nh[0][2] = 1 # k1
+        self.nh[0][4] = 2 # l1^2
+        self.nh[1][3] = 1 # k2
+        self.nh[1][5] = 2 # l2^2
+        
+        self.nh[2][3] = 1 # k2
+        self.nh[2][4] = 2 # l1^2
+        self.nh[3][2] = 1 # k1
+        self.nh[3][5] = 2 # l2^2
+        
+        self.nh[4][2] = 1 # k1
+        self.nh[4][4] = 1 # l1
+        self.nh[4][5] = 1 # l2
+        self.nh[5][3] = 1 # k2
+        self.nh[5][4] = 1 # l1
+        self.nh[5][5] = 1 # l2
+        
+        ## Second group
+        self.nh[6][2] = 1 # k1 
+        self.nh[6][18] = 2 # |q1|^2
+        self.nh[7][3] = 1 # k2
+        self.nh[7][20] = 2 # |q2-q1|^2
+        self.nh[8][3] = 1 # k2 
+        self.nh[8][18] = 2 # |q1|^2
+        self.nh[9][2] = 1 # k1
+        self.nh[9][20] = 2 # |q2-q1|^2
+        self.nh[10][2] = 1 # k1 
+        self.nh[10][18] = 1 # |q1|
+        self.nh[10][20] = 1 # |q2-q1|
+        self.nh[11][3] = 1 # k2
+        self.nh[11][18] = 1 # |q1|
+        self.nh[11][20] = 1 # |q2-q1|
+        
+        
+        ## Third group
+        self.nh[12][0] = -1 # 1/m1 
+        self.nh[12][11] = 2 # |p1|^2
+        self.nh[13][1] = -1 # 1/m2
+        self.nh[13][15] = 2 # |p2|^2
+        self.nh[14][1] = -1 # 1/m2 
+        self.nh[14][11] = 2 # |p1|^2
+        self.nh[15][0] = -1 # 1/m1
+        self.nh[15][15] = 2 # |p2|^2
+        self.nh[16][0] = -1 # 1/m1 
+        self.nh[16][12] = 1 # p1Tp2
+        self.nh[17][1] = -1 # 1/m2
+        self.nh[17][12] = 1 # p1Tp2
+        
+        ## Fourth group
+        self.nh[18][0] = 1 # m1 
+        self.nh[18][9] = 1 # gTq1
+        self.nh[19][1] = 1 # m2
+        self.nh[19][10] = 1 # gT(q2-q1)
+        self.nh[20][0] = 1 # m1 
+        self.nh[20][10] = 1 # gT(q2-q1)
+        self.nh[21][1] = 1 # m2
+        self.nh[21][9] = 1 # gTq1
+        
+        ## Fifth group
+        self.nh[22][0] = 1 # m1 
+        self.nh[22][4] = 1 # l1
+        self.nh[22][6] = 1 # |g|
+        self.nh[23][1] = 1 # m2
+        self.nh[23][5] = 1 # l2
+        self.nh[23][6] = 1 # |g|
+        self.nh[24][0] = 1 # m1 
+        self.nh[24][5] = 1 # l2
+        self.nh[24][6] = 1 # |g|
+        self.nh[25][1] = 1 # m2
+        self.nh[25][4] = 1 # l1
+        self.nh[25][6] = 1 # |g|
+        
+        self.h = np.zeros((32,21),dtype=np.float32)
+        # m1 / m2
+        self.h[0][0] = 1 # m1
+        self.h[0][1] = -1 # 1/m2
+        # m2 / m1
+        self.h[1][0] = -1 # 1/m1
+        self.h[1][1] = 1 # m2
+        # k1 / k2
+        self.h[2][2] = 1 # k1
+        self.h[2][3] = -1 # 1/k2
+        # k2 / k1
+        self.h[3][2] = -1 # 1/k1
+        self.h[3][3] = 1 # k2
+        # l1 / l2
+        self.h[4][4] = 1 # l1
+        self.h[4][5] = -1 # 1/l2
+        # l2 / l1
+        self.h[5][4] = -1 # 1/l1
+        self.h[5][5] = 1 # l2
+        
+        # m1 |g| / k1 / l1
+        self.h[6][0] = 1 # m1
+        self.h[6][6] = 1 # |g|
+        self.h[6][2] = -1 # 1/k1
+        self.h[6][4] = -1 # 1/l1
+        # m2 |g| / k2 / l2
+        self.h[7][1] = 1 # m2
+        self.h[7][6] = 1 # |g|
+        self.h[7][3] = -1 # 1/k2
+        self.h[7][5] = -1 # 1/l2
+        
+        # inv m1 |g| / k1 / l1
+        self.h[8] = -self.h[6][:] 
+        # inv m2 |g| / k2 / l2
+        self.h[9] = -self.h[7][:]
+        
+        # gTp1 / (|g||p1|)
+        self.h[10][7] = 1 # gTp1
+        self.h[10][6] = -1 # 1/|g|
+        self.h[10][11] = -1 # 1/|p1|
+        # gTp2 / (|g||p2|)
+        self.h[11][8] = 1 # gTp2
+        self.h[11][6] = -1 # 1/|g|
+        self.h[11][15] = -1 # 1/|p2|
+        # gTq1 / (|g||q1|)
+        self.h[12][9] = 1 # gTq1 
+        self.h[12][6] = -1 # 1/|g|
+        self.h[12][18] = -1 # 1/|q1|
+        # gTq2 / (|g||q2-q1|)
+        self.h[13][10] = 1 # gT(q2-q1) 
+        self.h[13][6] = -1 # 1/|g|
+        self.h[13][20] = -1 # 1/|q2-q1|
+        
+        # p1Tp2 / (|p1||p2|)
+        self.h[14][12] = 1 # p1Tp2
+        self.h[14][11] = -1 # 1/|p1|
+        self.h[14][15] = -1 # 1/|p2|
+        # p1Tq1 / (|p1||q1|)
+        self.h[15][13] = 1 # p1Tq1
+        self.h[15][11] = -1 # 1/|p1|
+        self.h[15][18] = -1 # 1/|q1|
+        # p1T(q2-q1) / (|p1||q2-q1|)
+        self.h[16][14] = 1 # p1T(q2-q1)
+        self.h[16][11] = -1 # 1/|p1|
+        self.h[16][20] = -1 # 1/|q2-q1|
+        # p2Tq1 / (|p2||q1|)
+        self.h[17][16] = 1 # p2Tq1 
+        self.h[17][15] = -1 # 1/|p2|
+        self.h[17][18] = -1 # 1/|q1|
+        # p2T(q2-q1) / (|p2||q2-q1|)
+        self.h[18][17] = 1 # p2T(q2-q1) 
+        self.h[18][15] = -1 # 1/|p2|
+        self.h[18][20] = -1 # 1/|q2-q1|
+        # q1T(q2-q1) / (|q1||q2-q1|)
+        self.h[19][19] = 1 # q1T(q2-q1)
+        self.h[19][18] = -1 # 1/|q1|
+        self.h[19][20] = -1 # 1/|q2-q1|
+        
+        # |q1|/l1
+        self.h[20][18] = 1 # |q1|
+        self.h[20][4] = -1 # 1/l1
+        # |q2-q1|/l2
+        self.h[21][20] = 1 # |q2-q1|
+        self.h[21][5] = -1 # 1/l2
+        
+        # |p1|/(l1 sqrt(m1k1))
+        self.h[22][11] = 1 # |p1|
+        self.h[22][4] = -1 # 1/|l1|
+        self.h[22][0] = -1/2 # 1/sqrt(m1)
+        self.h[22][2] = -1/2 # 1/sqrt(k1)
+        # |p2|/(l2 sqrt(m2k2))
+        self.h[23][15] = 1 # |p2|
+        self.h[23][5] = -1 # 1/|l2|
+        self.h[23][1] = -1/2 # 1/sqrt(m2)
+        self.h[23][3] = -1/2 # 1/sqrt(k2)
+        
+        self.h[24] = self.h[6] * 2
+        self.h[25] = self.h[7] * 2
+        self.h[26] = self.h[8] * 2
+        self.h[27] = self.h[9] * 2
+        
+        self.h[28] = self.h[20] * 2
+        self.h[29] = self.h[21] * 2
+        self.h[30] = self.h[22] * 2
+        self.h[31] = self.h[23] * 2
+         
+     
+
+    def map_m_func(self, params, x):
+        """x (d,) and h (m,d) gives output (m,)"""
+        return jnp.prod(x**params, axis=-1)
+
+    # def map_s_func(self, params, x):
+    #     """x (d,) and h (2,d) gives output (1,)"""
+    #     return jnp.sum(jnp.prod(x**params, axis=-1), keepdims=True)
+
+    def __call__(self, x):
+        """
+        Input 
+        - x: scalars with dimensions (n, d)
+        Output
+        - x_dl: dimensionless scalars (n, m)
+        - x_sc: scaling (n,2)  
+        """
+        ## Broadcasting: (n, d) & (m, d) => (n, m, d) => (n, m)
+        x_dl = jit(vmap(jit(partial(self.map_m_func, self.h))))(x)
+        
+        ## Broadcasting: (n, d) & (2, d) => (n, 2, d) => (n, 2)
+        x_sc = jit(vmap(jit(partial(self.map_m_func, self.nh))))(x) 
+        return x_dl, x_sc 
+      
+
+
+@export
+class ScalarTransformer:
+    """Transform (dimensionless) features using quantiles info or radial basis function.
+    
+    During the initialization stage, this method takes the whole training data set, 
+    zs (n,m*3), pv (n,l*3) and ps (n,k), and conducts the following transformation: 
+                zs, pv, ps
+        Step 0  => inner product scalars 
+        Step 1  => dimensionless scalars                   (optional, dimensionless = True)
+        Step 2  => rbf (or quantile) transformed scalars   (optional, method = 'rbf' (method = 'qt'))
+    Either one or both of the two optional steps can be skipped. 
+    If method is not 'none', transformer information (parameters) is recorded.
+    
+    When the Object is called, the input scalars go through: 
+        Step 1 (optional)
+        Step 2 (optional)
+    depending on the values of the arguments, dimensionless and method
+            
+    
+    Arguments
+    ----------
+    zs : jax.numpy.ndarray (n, m*3)
+        m target 3-dimensional vectors
+
+    (optional) pv : jax.numpy.ndarray (n, l*3) 
+        l auxilary 3-dimensional vectors as parameters
+
+    (optional) ps : jax.numpy.ndarray (n, k) 
+        k auxilary scalars as parameters
+    
+    dimensionless : bool
+        whether we want to make the scalars dimensionless 
+    
+    method : str, 'qt' or 'rbf' or 'none'
+
+    n_quantiles : int, default=1000 or n
+        Number of quantiles to be computed. It corresponds to the number
+        of landmarks used to discretize the cumulative distribution function.
+    
+    
+    Attributes
+    ---------- 
+    n_features : int 
+        number of features in the (dimensionless) (transformed) output
+    
+    n_zs : int
+        number of target 3-dimensional vectors
+    
+    n_pv : int
+        number of auxilary 3-dimensional vectors as parameters
+    
+    n_ps : int
+        number of auxilary scalars as parameters
+    
+    parameters : jax.numpy.ndarray of size (..., d)
+        parameters used in the transformer
+    
+    dimensionless_operator : lambda x : (x,1) or emlp.nn.objax.Dimensionless() funcion
+    
+    n_scaling : int
+        number of scaling in dimensionless_operator
+    
+    scaling_standardization : jax.numpy.ndarray 
+        standardization parameters used for scaling in dimensionless_operator
+    
+    ===========================================================================
+    rbf : Transform features using radial basis function
+
+    qt: Transform features using quantiles information  
+        Adapted from scikit_learn.preprocessing.QuantileTransformer. 
+        This method transforms the features to follow a uniform or a normal
+        distribution. Therefore, for a given feature, this transformation tends
+        to spread out the most frequent values. It also reduces the impact of
+        (marginal) outliers: this is therefore a robust preprocessing scheme.
+        
+        The transformation is applied on each feature independently. 
+        
+        Features values of new/unseen data that fall below or above the fitted range 
+        will be mapped to the bounds of the output distribution. 
+        
+        Note that this transform is non-linear. It may distort linear
+        correlations between variables measured at the same scale but renders
+        variables measured at different scales more directly comparable. 
+
+    none : Only perform standardization for each feature 
+    """
+    def __init__(
+        self, 
+        zs, 
+        pv=None,
+        ps=None, 
+        method: str = 'none', 
+        dimensionless: bool = False,
+        n_rad: int = 100,
+        n_quantiles: int = 1000, 
+        transform_distribution: str = 'uniform'   
+    ):  
+        zs = jnp.array(zs)
+        self.n_zs = zs.shape[-1] // 3
+        self.n_pv = 0 
+        self.n_ps = 0
+        if pv is not None:
+            pv = jnp.array(pv)
+            self.n_pv = pv.shape[-1] // 3
+        if ps is not None:
+            ps = jnp.array(ps)
+            self.n_ps = ps.shape[-1]  
+        
+        self.dimensionless = dimensionless
+        # Create inner product scalars
+        scalars = self._compute_scalars(zs, pv, ps)   
+        print(f"Scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
+        print(f"Scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
+        
+        # Create dimensionless parameters 
+        self._compute_dimensionless(scalars)
+
+        self.method = method
+        self.n_rad = n_rad
+        self.n_quantiles = n_quantiles
+        self.transform_distribution = transform_distribution
+        # Create the quantiles of reference
+        self.references = jnp.linspace(0, 1, self.n_quantiles, endpoint=True)
+        self.BOUNDS_THRESHOLD = 1e-7 
+        self.spacing = jnp.array(np.spacing(1)) 
+        
+        self._GETPARAMS = {
+            'qt': self._get_qt_params,
+            'rbf': self._get_rbf_params, 
+            'none': self._get_none_params
         }
         
-    def init(self):
-        empty = 2*[[]]
-        for obj in self.objects.values():
-            for elem in obj:
-                elem.set_data(*empty)
-                #if self.qt.shape[-1]==3: elem.set_3d_properties([])
-        return sum(self.objects.values(),[])
-
-    def update(self, i=0):
-        T,n,d = self.qt.shape
-        trail_len = 150
-        for j in range(n):
-            # trails
-            xyz = self.qt[max(i - trail_len,0): i + 1,j,:]
-            #chunks = xyz.shape[0]//10
-            #xyz_chunks = torch.chunk(xyz,chunks)
-            #for i,xyz in enumerate(xyz_chunks):
-            self.objects['traj_lines'][j].set_data(*xyz[...,:2].T)
-            if d==3: self.objects['traj_lines'][j].set_3d_properties(xyz[...,2].T)
-            self.objects['pts'][j].set_data(*xyz[-1:,...,:2].T)
-            if d==3: self.objects['pts'][j].set_3d_properties(xyz[-1:,...,2].T)
-        #self.fig.canvas.draw()
-        return sum(self.objects.values(),[])
-
-    def animate(self):
-        return animation.FuncAnimation(self.fig,self.update,frames=self.qt.shape[0],
-                    interval=33,init_func=self.init,blit=True).to_html5_video()
-
-class PendulumAnimation(Animation):
-    def __init__(self, qt,*args,**kwargs):
-        super().__init__(qt,*args,**kwargs)
-        empty = self.qt.shape[-1] * [[]]
-        self.objects["pts"] = sum([self.ax.plot(*empty, "o", ms=10,c=self.colors[i]) for i in range(self.qt.shape[1])], [])
-
-    def update(self, i=0):
-        return super().update(i)
-
-def helix(Ns=1000,radius=.05,turns=25):
-    t = np.linspace(0,1,Ns)
-    xyz = np.zeros((Ns,3))
-    xyz[:,0] = np.cos(2*np.pi*Ns*t*turns)*radius
-    xyz[:,1] = np.sin(2*np.pi*Ns*t*turns)*radius
-    xyz[:,2] = t
-    xyz[:,:2][(t>.9)|(t<.1)]=0
-    return xyz
-
-def align2ref(refs,vecs):
-    """ inputs [refs (n,3), vecs (N,3)]
-        outputs [aligned (n,N,3)]
-    assumes vecs are pointing along z axis"""
-    n,_ = refs.shape
-    N,_ = vecs.shape
-    norm = np.sqrt((refs**2).sum(-1))
-    v = refs/norm[:,None]
-    A = np.zeros((n,3,3))
-    A[:,:,2] += v
-    A[:,2,:] -= v
-    M = (np.eye(3)+A+(A@A)/(1+v[:,2,None,None]))
-    scaled_vecs = vecs[None]+0*norm[:,None,None] #broadcast to right shape
-    scaled_vecs[:,:,2] *= norm[:,None]#[:,None,None]
-    return (M[:,None]@scaled_vecs[...,None]).squeeze(-1)
-
+        # Compute the global quansformation parameters
+        self._GETPARAMS[self.method](scalars)
+       
+        self._TRANSFORMS = {
+            'qt': self._qt_transform,
+            'rbf': self._rbf_transform,
+            'none': self._none_transform
+        }
     
-class CoupledPendulumAnimation(PendulumAnimation):
-    
-    def __init__(self, *args, spring_lw=.6,spring_r=.2,**kwargs):
-        super().__init__(*args, **kwargs)
-        empty = self.qt.shape[-1]*[[]]
-        self.objects["springs"] = self.ax.plot(*empty,c='k',lw=spring_lw)#
-        #self.objects["springs"] = sum([self.ax.plot(*empty,c='k',lw=2) for _ in range(self.n-1)],[])
-        self.helix = helix(200,radius=spring_r,turns=10)
+    def _compute_dimensionless(self):
+        self.n_scaling = 1
+        self.dimensionless_operator = lambda x: (x, jnp.ones((self.n_scaling,))) 
+        self.scaling_standardization = jnp.vstack([jnp.zeros((self.n_scaling,)),jnp.ones((self.n_scaling,))])
+
+    def _get_none_params(self, x):
+        """Gets parameters for standardization transformation:
         
-    def update(self,i=0):
-        qt_padded = np.concatenate([0*self.qt[i,:1],self.qt[i,:]],axis=0)
-        diffs = qt_padded[1:]-qt_padded[:-1]
-        x,y,z = (align2ref(diffs,self.helix)+qt_padded[:-1][:,None]).reshape(-1,3).T
-        self.objects['springs'][0].set_data(x,y)
-        self.objects['springs'][0].set_3d_properties(z)
-        return super().update(i)
+        Arguments 
+        -----------
+        x : jax.numpy.ndarray (n, d)
+        Returns
+        -----------
+        params : jax.numpy.ndarray (2, d)
+            params[0] gives mean
+            params[1] gives std
+        n_features: int 
+            number of features in the transformed output
+        """  
+        self.parameters = jnp.stack([jnp.mean(x, axis = 0), jnp.std(x, axis = 0)], axis = 0)
+        self.n_features = x.shape[-1]
 
-from collections.abc import Iterable
-
-
-@export
-class odeScalars_trial(object):
-    """ A training trial for the Neural ODEs, contains lots of boiler plate which is not necessary.
-        Feel free to use your own."""
-    def __init__(self,make_trainer,strict=True):
-        self.make_trainer = make_trainer
-        self.strict=strict
-    def __call__(self,cfg):
-        try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            i = cfg['trial']
-            orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-            cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
-            trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
-            trainer.train(cfg['num_epochs'])
-            # if save: cfg['saved_at']=trainer.save_checkpoint()
-            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_NODEs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{i}"
-            if save:
-                # Pickling
-                pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
-             
-            outcome = trainer.ckpt['outcome']
-            trajectories = []
-            for mb in trainer.dataloaders['test']:
-                trajectories.append(pred_and_gt_ode(trainer.dataloaders['test'].dataset,trainer.model,mb)) 
-            torch.save(np.concatenate(trajectories), savefilename_prefix+"_traj.t")
-        except Exception as e:
-            if self.strict: raise
-            outcome = e
-        del trainer
-        return cfg, outcome
+    def _get_rbf_params(self, x):
+        """Gets parameters for Radial Basis Function Transformation:
+        
+        Arguments 
+        -----------
+        x : jax.numpy.ndarray (n, d)
+        n_rad : int
+            number of transformed outputs for each d
+        Returns
+        -----------
+        params : jax.numpy.ndarray (n_rad+1, d)
+            params[0] gives gamma (1, d)
+            params[1:] gives mu (n_rad, d)
+        n_features: int 
+            number of features in the transformed output
+        Remarks
+        -----------
+        Given mu (n,d) and gamma (d,), RBF for x (n,d) gives x_trans (n,n_rad)
+        x_trans[:,i] = exp(-gamma[:,i]*(x[:,i]-mu[:,i])**2), i=1,...,d
+        """ 
+        xmin = jnp.min(x, axis=0, keepdims=True) # (1,d) 
+        xmax = jnp.max(x, axis=0, keepdims=True) # (1,d)
+        gamma = 2*(xmax - xmin)/(self.n_rad - 1) # (1,d)
+        mu    = jnp.linspace(start=xmin[0], stop=xmax[0], num=self.n_rad) # (nrad, d)
+        self.parameters = jnp.concatenate([gamma, mu], axis=0) # (n_rad+1,d)
+        self.n_features = x.shape[1]*self.n_rad
+        
+    def _get_qt_params(self, x): 
+        """Gets parameters for Quantile Transformation
+        
+        Arguments:
+        ----------
+        x : jax.numpy.ndarray (n, d)
+        self.references : (array_like of float) 
+            Percentile or sequence of percentiles to compute, 
+            which must be between 0 and 100 inclusive.
+        Returns 
+        ---------
+        quantiles : numpy.ndarray of shape (n_quantiles, d)
+            The values corresponding the quantiles of reference.
+        n_features: int 
+            number of features in the transformed output
+        """ 
+        self.parameters = jnp.nanpercentile(x, self.references*100, axis=0)
+        self.n_features = x.shape[1] 
     
+    def _none_transform(self, X):
+        return (X-self.parameters[0])/self.parameters[1]
+
+    def _rbf_transform(self, X):
+        """RBF : Transform features using radial basis function 
+        Arguments
+        ----------
+        X : jax.numpy.ndarray (n, d)
+        self.parameters : jax numpy ndarray (n_rad+1, d)
+            self.parameters[0] gives gamma (1, d)
+            self.parameters[1:] gives mu (n_rad, d)
+        Returns
+        ----------
+        X : jax.numpy.ndarray (n, n_rad*d)
+        """
+        n = X.shape[0]
+        return jnp.exp(-self.parameters[0] * (X-self.parameters[1:])**2).reshape(n,-1)
     
-@export
-class hnnScalars_trial(object):
-    """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
-        Feel free to use your own."""
-    def __init__(self,make_trainer,strict=True):
-        self.make_trainer = make_trainer
-        self.strict=strict
-    def __call__(self,cfg):
-        try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            i=cfg['trial']
-            orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-            cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
-            trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
-            trainer.train(cfg['num_epochs'])
-            # if save: cfg['saved_at']=trainer.save_checkpoint()
-            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{i}"
-            if save:
-                # Pickling
-                pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
-                 
-            outcome = trainer.ckpt['outcome']
-            # we could have more than one test sets
-            testname_all = [s for s in trainer.dataloaders.keys() if s not in ['val', 'train', 'Train']]
-            for testname in testname_all:
-                trajectories = []
-                for mb in trainer.dataloaders[testname]:
-                    trajectories.append(pred_and_gt(trainer.dataloaders[testname].dataset,trainer.model,mb))
-                torch.save(np.concatenate(trajectories), savefilename_prefix+"_traj_"+testname+".t")
-                
-        except Exception as e:
-            if self.strict: raise
-            outcome = e
-        del trainer
-        return cfg, outcome
+    def _qt_transform(self, X): 
+        """Forward quantile transform.
+        
+        Arguments
+        ----------
+        X : jax.numpy.ndarray of shape (n, d)
+            The data used to scale along the features axis. 
+        self.parameters : jax.numpy.ndarray of shape (n_quantiles, d)
+            The values corresponding the quantiles of reference.
+        
+        self.transform_distribution : {'uniform', 'normal'}, default='uniform'
+            Marginal distribution for the transformed data. The choices are
+            'uniform' (default) or 'normal'.
+        Returns
+        -------
+        X : jax ndarray of shape (n, d)
+            Projected data.
+        """ 
+        
+        X = vmap(jit(self._qt_transform_col), in_axes=(1,1), out_axes=1)(X, self.parameters) 
+        return X
+
+    def _qt_transform_col(self, X_col, params):
+        """Private function to forward transform a single feature."""
+        lower_bound_x = params[0]
+        upper_bound_x = params[-1]
+        lower_bound_y = 0
+        upper_bound_y = 1
+        n = X_col.shape[0]
+
+        lower_bounds_idx = jnp.nonzero(
+            X_col - self.BOUNDS_THRESHOLD < lower_bound_x, 
+            size = n, 
+            fill_value = n+1
+        )
+         
+        upper_bounds_idx = jnp.nonzero(
+            X_col + self.BOUNDS_THRESHOLD > upper_bound_x, 
+            size = n, 
+            fill_value = n+1
+        )
+        
+        # Interpolate in one direction and in the other and take the
+        # mean. This is in case of repeated values in the features
+        # and hence repeated quantiles
+        #
+        # If we don't do this, only one extreme of the duplicated is
+        # used (the upper when we do ascending, and the
+        # lower for descending). We take the mean of these two
+          
+        X_col = 0.5 * (
+            jnp.interp(X_col, params, self.references)
+            - jnp.interp(-X_col, -params[::-1], -self.references[::-1])
+        )
+         
+        X_col = X_col.at[upper_bounds_idx].set(upper_bound_y)
+        X_col = X_col.at[lower_bounds_idx].set(lower_bound_y)
+
+        # for forward transform, match the output PDF
+        if self.transform_distribution == "normal":  
+            X_col = jss.norm.ppf(X_col)
+            # find the value to clip the data to avoid mapping to
+            # infinity. Clip such that the inverse transform will be
+            # consistent
+            clip_min = jss.norm.ppf(self.BOUNDS_THRESHOLD - self.spacing)
+            clip_max = jss.norm.ppf(1 - (self.BOUNDS_THRESHOLD - self.spacing))
+            X_col = jnp.clip(X_col, clip_min, clip_max)
+        
+        # else output distribution is uniform and the ppf is the
+        # identity function so we let X_col unchanged
+        return X_col
+    
+    def _compute_scalars(self, x, pv=None, ps=None):
+        raise NotImplementedError
+
+    def __call__(self, x, pv=None, ps=None): 
+        # Compute inner product scalars 
+        scalars = self._compute_scalars(x, pv, ps)
+        # Create dimensionless features 
+        scalars, scaling = self.dimensionless_operator(scalars)
+        
+        # Standardize scalings 
+        scaling = (scaling - self.scaling_standardization[0]) / self.scaling_standardization[1]
+        
+        return jit(self._TRANSFORMS[self.method])(scalars), scaling
 
 
 @export
-class hnnScalarsGeneral_trial(object):
-    """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
-        Feel free to use your own."""
-    def __init__(self,make_trainer,strict=True):
-        self.make_trainer = make_trainer
-        self.strict=strict
-    def __call__(self,cfg):
-        try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            i=cfg['trial']
-            orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-            cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
-            trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
-            trainer.train(cfg['num_epochs']) 
-            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_n{cfg['ndata']}_{cfg['transformer_config']}_{i}"
-            if save:
-                # Pickling
-                pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
-                 
-            outcome = trainer.ckpt['outcome']
-            # we could have more than one test sets
-            testname_all = [s for s in trainer.dataloaders.keys() if s not in ['val', 'train', 'Train']]
-            for testname in testname_all:
-                trajectories = []
-                for mb in trainer.dataloaders[testname]:
-                    trajectories.append(pred_and_gt_general(trainer.dataloaders[testname].dataset,trainer.model,mb))
-                torch.save(np.concatenate(trajectories), savefilename_prefix+"_traj_"+testname+".t")
-                
-        except Exception as e:
-            if self.strict: raise
-            outcome = e
-        del trainer
-        return cfg, outcome
+class ScalarTransformerGeneral(ScalarTransformer):
+    def _compute_scalars(self, x, pv=None, ps=None):
+        """Input x of dim (...,m*3), param vector input of (...,l*3) scalar input of (...,k)"""
+        x = x.reshape(-1,self.n_zs,3)
+        n = x.shape[0]
+
+        xx = jnp.einsum('bix,bjx->bij', x, x).reshape(n, -1)  # (n, m*m) 
+        xxsqrt = jnp.sqrt(jnp.einsum('bix,bix->bi', x, x))     
+         
+        scalars = jnp.concatenate([xx, xxsqrt], axis=-1)  
+        if pv is not None: 
+            pv = pv.reshape(-1,self.n_pv,3)
+            vx = jnp.einsum("...ij,...ij", pv, x).reshape(n, -1) # (n, l*l)
+            vv = jnp.einsum('bix,bjx->bij', pv, pv).reshape(n, -1)  # (n, m*m)
+            vvsqrt = jnp.sqrt(vv) # (n, m*m)
+            scalars = jnp.concatenate([scalars, vx, vv, vvsqrt], axis=-1)
+        if ps is not None:
+            ps = ps.reshape(-1,self.n_ps,3)
+            scalars = jnp.concatenate([scalars, ps, 1/ps], axis=-1)
+        return scalars  
+
+    def __call__(self, x, pv=None, ps=None):
+        """Input x of dim (n,m,3), param vector input of (n,l,3) scalar input of (n,k)"""
+        # Compute inner product scalars 
+        scalars = self._compute_scalars(x, pv, ps)
+        # Create dimensionless features 
+        scalars, _ = self.dimensionless_operator(scalars)
+        
+        # Standardize scalings 
+        scaling = (scaling - self.scaling_standardization[0]) / self.scaling_standardization[1]
+        
+        return jit(self._TRANSFORMS[self.method])(scalars), scaling
+ 
+
+@export
+class ScalarTransformerDP(ScalarTransformer):
+    """Transform (dimensionless) features using quantiles info or radial basis function.
+    
+    During the initialization stage, this method takes the whole training data set, 
+    zs (n,4,3), pv (n,3) and ps (n,6), and conducts the following transformation: 
+                zs, pv, ps
+        Step 0  => inner product scalars 
+        Step 1  => dimensionless scalars                   (optional, dimensionless = True)
+        Step 2  => rbf (or quantile) transformed scalars   (optional, method = 'rbf' (method = 'qt'))
+    Either one or both of the two optional steps can be skipped. 
+    If method is not 'none', transformer information (parameters) is recorded.
+    
+    When the Object is called, the input scalars go through: 
+        Step 1 (optional)
+        Step 2 (optional)
+    depending on the values of the arguments, dimensionless and method
+            
+    
+    Arguments
+    ----------
+    zs : jax.numpy.ndarray (n, 4, 3)
+        Double pendulum TRAINING data positions and velocities q1, q2, p1, p2
+    pv : jax.numpy.ndarray (n, 3) 
+        Double pendulum TRAINING data parameters g
+    ps : jax.numpy.ndarray (n, 6) 
+        Double pendulum TRAINING data parameters m1, m2, k1, k2, l1, l2
+    """  
+    def _create_index(self):
+        """create the indexing for the construction of the inner product scalars"""
+        idx = jnp.array(
+            list(itertools.combinations_with_replacement(jnp.arange(0,4), r=2))
+        )
+        idx_map = jnp.array([2,3,0,1])
+        idx = self.idx_map[idx] 
+        idx_sqrt = jnp.concatenate(
+            [jnp.zeros(1, dtype=int), jnp.cumsum(jnp.arange(2,5)[::-1])], 
+            axis=0
+        ) 
+        return idx, idx_sqrt, idx_map
+    
+    def _compute_dimensionless(self,scalars):
+        self.n_scaling = 26
+        self.dimensionless_operator = lambda x: (x, jnp.ones((self.n_scaling,))) 
+        self.scaling_standardization = jnp.vstack([jnp.zeros((self.n_scaling,)),jnp.ones((self.n_scaling,))])
+        
+        if self.dimensionless:
+            # Create dimensionless features 
+            self.dimensionless_operator = DimensionlessDP() 
+            scalars, scaling = self.dimensionless_operator(scalars)
+            print(f"Dimensionless scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
+            print(f"Dimensionless scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
+            print(f"Dimensionless scaling max={jnp.round(jnp.max(scaling, axis=0), 2)} and min={jnp.round(jnp.min(scaling, axis=0), 4)}")
+            self.scaling_standardization = jnp.vstack(
+                [jnp.min(scaling, axis=0), jnp.max(scaling, axis=0) - jnp.min(scaling, axis=0)] 
+            )
+            self.n_scaling = scaling.shape[-1]
+        # print(f"Dimension of features is {scalars.shape[1]}, and the rank is {jnp.linalg.matrix_rank(scalars)}")
+     
+    def _compute_scalars(self, x, pv, ps):
+        """Input x of dim (n,4,3), pv = g of dim (n,3), ps = (m1, m2, k1, k2, l1, l2) of (n,6)"""
+        idx, idx_sqrt, idx_map = self._create_index()
+        # get q2 - q1 replacing q2
+        x = x.at[:,1,:].set(x[:,1,:]-x[:,0,:])  
+        xx = jnp.sum(
+            x[:,idx[:,0],:] * x[:,idx[:,1],:], 
+            axis=-1
+        ) # (n, 10)
+        vx = jnp.einsum("...j,...ij", pv, x[:,idx_map]) # (n, 4)
+        vv = jnp.sum(pv*pv, axis = -1, keepdims=True) # (n, 1)
+        if self.dimensionless:
+            xx = xx.at[:,idx_sqrt].set(jnp.sqrt(xx[:,idx_sqrt])) 
+            ## all the current scalars we have 
+            scalars = jnp.concatenate([ps, jnp.sqrt(vv), vx, xx], axis = -1) # (n, 21)
+        else:
+            xxsqrt = jnp.sqrt(xx[:,idx_sqrt]) # (n, 4)
+            ggsqrt = jnp.sqrt(vv) # (n, 1)
+            scalars = jnp.concatenate([ps, vv, vx, xx, ggsqrt, xxsqrt, 1/ps], axis=-1) # (n, 32)
+        return scalars  
+
+    def __call__(self, x, pv, ps): 
+        # Compute inner product scalars 
+        scalars = self._compute_scalars(
+            x.reshape(-1,4,3), pv.reshape(-1,3), ps.reshape(-1,6)
+        )
+        # Create dimensionless features 
+        scalars, scaling = self.dimensionless_operator(scalars)
+        
+        # Standardize scalings 
+        scaling = (scaling - self.scaling_standardization[0]) / self.scaling_standardization[1]
+        
+        return jit(self._TRANSFORMS[self.method])(scalars), scaling
+
+
