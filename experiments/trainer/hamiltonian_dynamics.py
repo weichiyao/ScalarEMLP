@@ -106,18 +106,18 @@ class HamiltonianDataset(Dataset):
         )
 
         if os.path.exists(filename) and not regen:
-            Zs, PVs, PSs = torch.load(filename)
+            Zs, PV, PS = torch.load(filename)
         else:
-            zs, PVs, PSs = self.generate_trajectory_data(
+            zs, PV, PS = self.generate_trajectory_data(
                 n_systems, dt, integration_time, changedist, rescaleKG, scale
             )
             Zs = np.asarray(self.chunk_training_data(zs, chunk_len))
             os.makedirs(root_dir, exist_ok=True)
-            torch.save((Zs, PVs, PSs), filename)
+            torch.save((Zs, PV, PS), filename)
         
         self.Zs = Zs
-        self.PVs = PVs
-        self.PSs = PSs
+        self.PV = PV
+        self.PS = PS
         self.T = np.asarray(jnp.arange(0, chunk_len*dt, dt))
         self.T_long = np.asarray(jnp.arange(0,integration_time,dt))
 
@@ -125,7 +125,7 @@ class HamiltonianDataset(Dataset):
         return self.Zs.shape[0]
 
     def __getitem__(self, i):
-        return (self.Zs[i, 0], self.T, self.PVs[i], self.PSs[i]), self.Zs[i]
+        return (self.Zs[i, 0], self.T, self.PV[i], self.PS[i]), self.Zs[i]
 
     def integrate(self, z0s, ts, pv, ps):
         return HamiltonianFlow(self.H, z0s, ts, pv, ps)
