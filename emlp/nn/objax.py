@@ -423,25 +423,7 @@ class ScalarMLP(Module, metaclass=Named):
     
     def __call__(self, x, xp, training = True):
         return self.H(x, xp)
-
-@export
-class EquivarianceLayer_objax(ScalarMLP):
-    def __call__(self, x, t, xp):
-        scalars, _ = self.transformer(x, xp) # (n, n_in)
-        out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
-        
-        y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
-        out = jnp.sum(out[:,:16].reshape(-1,4,4,1) * jnp.expand_dims(x, 1), axis=1) # (n,4,3)
-        out += out[:,16:19] * jnp.expand_dims(y,1) # (n,4,3)
-        out += out[:19:] * jnp.expand_dims(g,1) # (n,4,3)
-    
-        # x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,16,:] * y + out[:,20,:] * g #(n,3)
-        # x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * g #(n,3)
-        # p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * g #(n,3)
-        # p2 = jnp.sum(out[:,12:16,:]*x, axis = 1) + out[:,19,:] * y + out[:,23,:] * g #(n,3)
-        
-        return out.reshape(-1, 12) #(n,12)
-
+ 
 @export  
 class InvarianceLayer_objax(ScalarMLP):
     def __init__(
