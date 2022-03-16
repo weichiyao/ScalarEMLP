@@ -664,7 +664,7 @@ class hnnScalarsKnown_trial(object):
     def __init__(self,make_trainer,strict=True):
         self.make_trainer = make_trainer
         self.strict=strict
-    def __call__(self,cfg,i=None):
+    def __call__(self,cfg):
         try:
             trainer = self.make_trainer(**cfg)
             trainer.train(cfg['num_epochs'])
@@ -672,7 +672,7 @@ class hnnScalarsKnown_trial(object):
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt_known(trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_{i}.t")
+            torch.save(np.concatenate(trajectories),f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_{cfg['trial']}.t")
         except Exception as e:
             if self.strict: raise
             outcome = e
