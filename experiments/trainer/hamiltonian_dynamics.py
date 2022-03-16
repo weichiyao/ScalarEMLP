@@ -125,9 +125,9 @@ class HamiltonianDataset(Dataset):
         return self.Zs.shape[0]
 
     def __getitem__(self, i):
-        return (self.Zs[i, 0], self.PVs[i], self.PSs[i], self.T), self.Zs[i]
+        return (self.Zs[i, 0], self.T, self.PVs[i], self.PSs[i]), self.Zs[i]
 
-    def integrate(self, z0s, pv, ps, ts):
+    def integrate(self, z0s, ts, pv, ps):
         return HamiltonianFlow(self.H, z0s, ts, pv, ps)
     
     def generate_trajectory_data(
@@ -141,8 +141,12 @@ class HamiltonianDataset(Dataset):
         bs=100
     ):
         """ 
-        Returns ts: (n_systems, traj_len) zs: (n_systems, traj_len, z_dim)
-                zps: (n_systems, 9) = (g, (m1,k1,l1), (m2,k2,l2))
+        Returns 
+        ===============
+        ts: (n_systems, traj_len) 
+        zs: (n_systems, traj_len, z_dim) q1,q2,p1,p2
+        pv: (n_systems, 3) g 
+        ps: (n_systems, 6) m1,m2,k1,k2,l1,l2 
         """
         if not rescaleKG:
             scale = np.ones((n_systems,))
@@ -185,8 +189,8 @@ class HamiltonianDataset(Dataset):
         chosen_zs = chunked_zs[chunk_idx, np.arange(batch_size)]
         return chosen_zs
 
-    def H(self,z,zp):
-        """ The Hamiltonian function, depending on z=pack(q,p), zp=(g,m1,k1,g1,m2,k2,g2)"""
+    def H(self,z,pv=None,ps=None):
+        """ The Hamiltonian function, depending on z=pack(q,p), pv=g, ps=m1,m2,k1,k2,l1,l2)"""
         raise NotImplementedError 
 
     def sample_initial_conditions(self,bs,changedist,rescaleKG,scale):
@@ -203,7 +207,7 @@ class HamiltonianDataset(Dataset):
                     HTML(dataset.animate())"""
         if zt is None:
             pvt = self.sample_parameters(10)
-            zt = np.asarray(self.integrate(self.sample_initial_conditions(10)[0],pvt,pst,self.T_long))
+            zt = np.asarray(self.integrate(self.sample_initial_conditions(10)[0],self.T_long,pvt,pst))
         
         # bs, T, 2nd
         if len(zt.shape) == 3:
@@ -281,6 +285,89 @@ class DoubleSpringPendulum(HamiltonianDataset):
     def animator(self):
         return CoupledPendulumAnimation
 
+class MakeDataset(Dataset):
+    def __init__(self, zs, t, pv=None, ps=None):
+        self.zs = zs 
+        self.t = t
+        self.n = zs.shape[0]
+        if pv is None:
+           pv = np.full((self.n,), None)
+        if ps is None:
+           ps = np.full((self.n,), None)
+        self.pv = pv
+        self.ps = ps
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, i): 
+        return (self.zs[i, 0], self.t[i], self.pv[i], self.ps[i]), self.zs[i]
+
+class GeneralData(object):
+    def __init__(
+        self,
+        datasource='/home/data.pickle',
+        itest=[1],
+        chunk_len=5,
+        ntrain_out=None
+    ):
+        super().__init__()
+        with open(datasource, 'rb') as handle:
+            ret = pickle.load(handle)
+        
+        # Split the train and test dataset 
+        ndata = ret.shape[0]
+        ntest = len(itest)
+        mask_test = np.full((ndata,), False)
+        mask_test[itest] = True
+        
+        train_data = self.chunk_training_data(
+            ret[~mask_test], 
+            chunk_len=chunk_len,
+            ntrain_out=ntrain_out
+        ) # (batch_size, chunk_len, 7)
+        test_data = ret[mask_test] # (batch_size, 90, 7)
+        
+        # Make Dataset
+        self.trainset = MakeDataset(train_data[:,:,1:], train_data[:,:,0], None, None)
+        self.testset = MakeDataset(test_data[:,:,1:], test_data[:,:,0], None, None)
+
+    def __call__(self):
+        return {"train": self.trainset, "val": self.testset, "test": self.testset}
+     
+    def chunk_training_data(self, zs, chunk_len=5, ntrain_out=None): 
+        """
+        if n_out is not specified  
+          we simply cut each full traj into consecutive pieces of size (chunk_len,)
+          total number of output training data = n_chunks * batch_size
+        otherwise: 
+          randomly select starting point in each full traj to cut 
+          total number of output training data = n_out
+          note: n_out // batch_size < traj_len - chunk_len
+        """
+        batch_size, traj_len, *z_dim = zs.shape
+        
+        if ntrain_out is None:
+            n_chunks = traj_len // chunk_len
+            chunked_zs = np.concatenate(np.split(zs, n_chunks, axis=1), axis=0) 
+        else:
+            n_each = ntrain_out // batch_size
+            start = np.stack(
+                [np.random.choice(traj_len-chunk_len, (n_each,), replace=False) 
+                 for _ in range(batch_size)], 
+                axis=0
+            )
+            take = np.repeat(start, chunk_len).reshape(batch_size,n_each,chunk_len) 
+            take += np.tile(np.arange(chunk_len),n_each).reshape(n_each,chunk_len)
+            chunked_zs = np.concatenate(
+                [zs[ii][take[ii]] for ii in range(batch_size)],
+                axis = 0
+            )
+        return chunked_zs
+
+      
+      
+     
 class IntegratedDynamicsTrainer(Regressor):
     """ A trainer for training the Hamiltonian Neural Networks. Feel free to use your own instead."""
     def __init__(self,model,*args,**kwargs):
@@ -290,10 +377,9 @@ class IntegratedDynamicsTrainer(Regressor):
     
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
-        (z0, pv, ps, ts), true_zs = minibatch  
-        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],pv,ps) # (n,T,12)
-         
-        return jnp.mean((pred_zs - true_zs)**2)
+        (z0,ts,pv,ps),true_zs = minibatch  
+        pred_zs=BHamiltonianFlow(self.model,z0,ts[0],pv,ps) # (n,T,12)
+        return jnp.mean((pred_zs-true_zs)**2)
 
     def metrics(self, loader):
         mse = lambda mb: np.asarray(self.loss(mb))
@@ -305,9 +391,12 @@ class IntegratedDynamicsTrainer(Regressor):
         printname_all = [s+'_Rollout' for s in testname_all]
         for i in range(len(testname_all)):
             loader = self.dataloaders[testname_all[i]]
-            metrics = np.exp(self.evalAverageMetrics(
-                loader, partial(log_rollout_error, loader.dataset, self.model)
-            ))
+            metrics = np.exp(
+                self.evalAverageMetrics(
+                    loader, 
+                    partial(log_rollout_error, loader.dataset, self.model)
+                )
+            )
             metrics = {printname_all[i]: metrics} 
             self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)
@@ -317,15 +406,13 @@ class IntegratedODETrainer(Regressor):
     def __init__(self,model,*args,**kwargs):
         super().__init__(model,*args,**kwargs)
         self.loss = objax.Jit(self.loss, model.vars())
-        #self.model = objax.Jit(self.model)
-        self.gradvals = objax.Jit(objax.GradValues(self.loss, model.vars()))#objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
-        #self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
+        self.gradvals = objax.Jit(objax.GradValues(self.loss, model.vars()))
 
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
-        (z0, pv, ps, ts), true_zs = minibatch 
+        (z0,ts,pv,ps),true_zs = minibatch 
         pred_zs = BOdeFlow(self.model,z0,ts[0],pv,ps)
-        return jnp.mean((pred_zs - true_zs)**2)
+        return jnp.mean((pred_zs-true_zs)**2)
 
     def metrics(self, loader):
         mse = lambda mb: np.asarray(self.loss(mb))
@@ -333,7 +420,12 @@ class IntegratedODETrainer(Regressor):
         
     def logStuff(self, step, minibatch=None):
         loader = self.dataloaders['test']
-        metrics = {'test_Rollout': np.exp(self.evalAverageMetrics(loader,partial(log_rollout_error_ode,loader.dataset,self.model)))} 
+        metrics = {'test_Rollout': np.exp(
+            self.evalAverageMetrics(
+                loader,
+                partial(log_rollout_error_ode,loader.dataset,self.model)
+            )
+        )} 
         self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)
 
@@ -346,12 +438,12 @@ class GeneralDynamicsTrainer(Regressor):
 
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
-        (z0,pv,ps,ts),true_zs = minibatch
-        pred_zs = BHamiltonianFlow(self.model,z0,ts[0],ps,pv)
-        return jnp.mean((pred_zs - true_zs)**2)
+        (z0,ts,pv,ps),true_zs = minibatch
+        pred_zs=BHamiltonianFlow(self.model,z0,ts[0],ps,pv)
+        return jnp.mean((pred_zs-true_zs)**2)
 
     def metrics(self, loader):
-        mse = lambda mb: np.asarray(self.loss(mb))
+        mse=lambda mb: np.asarray(self.loss(mb))
         return {"MSE": self.evalAverageMetrics(loader, mse)}
     
     def logStuff(self, step, minibatch=None):
@@ -359,7 +451,7 @@ class GeneralDynamicsTrainer(Regressor):
         metrics = {'test_Rollout': np.exp(
             self.evalAverageMetrics(
                 loader,
-                partial(log_rollout_error_general,loader.dataset,self.model)
+                partial(log_rollout_error_general,self.model)
             )
         )}
         self.logger.add_scalars('metrics', metrics, step)
@@ -373,7 +465,7 @@ def log_rollout_error_general(model,minibatch):
     """ Computes the log of the geometric mean of the rollout
         error computed between the dataset ds and HNN model
         on the initial condition in the minibatch."""
-    (z0,pv,ps,ts),gt_zs = minibatch
+    (z0,ts,pv,ps),gt_zs = minibatch
     pred_zs = BHamiltonianFlow(model,z0,ts[0],pv,ps)
     errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
     clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
@@ -384,7 +476,7 @@ def log_rollout_error(ds,model,minibatch):
     """ Computes the log of the geometric mean of the rollout
         error computed between the dataset ds and HNN model
         on the initial condition in the minibatch."""
-    (z0,pv,ps,_),_ = minibatch
+    (z0,_,pv,ps),_ = minibatch
     pred_zs = BHamiltonianFlow(model,z0,ds.T_long,pv,ps)
     gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps)
     errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
@@ -396,7 +488,7 @@ def log_rollout_error_ode(ds,model,minibatch):
     """ Computes the log of the geometric mean of the rollout
         error computed between the dataset ds and NeuralODE model
         on the initial condition in the minibatch."""
-    (z0,pv,ps,_), _ = minibatch 
+    (z0,_,pv,ps), _ = minibatch 
     pred_zs = BOdeFlow(model,z0,ds.T_long,pv,ps) 
     gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps)
     errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
@@ -405,19 +497,19 @@ def log_rollout_error_ode(ds,model,minibatch):
     return log_geo_mean
 
 def pred_and_gt(ds,model,minibatch):
-    (z0, pv, ps, _), _ = minibatch
+    (z0,_,pv,ps), _ = minibatch
     pred_zs = BHamiltonianFlow(model,z0,ds.T_long,pv,ps,tol=2e-6)
     gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
 
 def pred_and_gt_ode(ds,model,minibatch):
-    (z0,pv,ps,_), _ = minibatch 
+    (z0,_,pv,ps), _ = minibatch 
     pred_zs = BOdeFlow(model,z0,ds.T_long,pv,ps,tol=2e-6) 
     gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,pv,ps,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
 
 def pred_and_gt_general(model,minibatch): 
-    (z0,pv,ps,ts),gt_zs = minibatch
+    (z0,ts,pv,ps),gt_zs = minibatch
     pred_zs = BHamiltonianFlow(model,z0,ts[0],pv,ps,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
 
