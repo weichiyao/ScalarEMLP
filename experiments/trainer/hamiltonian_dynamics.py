@@ -43,7 +43,7 @@ def hamiltonian_dynamics(hamiltonian, z,t,zp):
     - a Hamiltonian function, 
     - a state vector z, 
     - an unused time t,
-    - parameters zp including g, m1, k1, l2, m2, k2, l2
+    - parameters zp including g, m1, m2, k1, k2, l1, l2
     to compute the hamiltonian dynamics J∇H
     """
     # Differentiate `hamiltonian` with respect to the first positional argument
@@ -54,7 +54,7 @@ def hamiltonian_dynamics(hamiltonian, z,t,zp):
 
 def HamiltonianFlow(H,z0,T,zp):
     """ Converts a Hamiltonian H and initial conditions z0,
-        as well as other parameters zp (g, m1, k1, l2, m2, k2, l2)
+        as well as other parameters zp (g, m1, m2, k1, k2, l1, l2)
         to rolled out trajectory at time points T.
         z0 shape (state_dim,) and T shape (t,) yields (t,state_dim) rollout."""
     dynamics = lambda z,t,zp: hamiltonian_dynamics(H,z,t,zp)
@@ -144,7 +144,7 @@ class HamiltonianDataset(Dataset):
     ):
         """ 
         Returns ts: (n_systems, traj_len) zs: (n_systems, traj_len, z_dim)
-                zps: (n_systems, 9) = (g, (m1,k1,l1), (m2,k2,l2))
+                zps: (n_systems, 9) = (g, m1, m2, k1, k2, l1, l2)
         """
         if not rescaleKG:
             scale = np.ones((n_systems,))
@@ -187,7 +187,7 @@ class HamiltonianDataset(Dataset):
         return chosen_zs
 
     def H(self,z,zp):
-        """ The Hamiltonian function, depending on z=pack(q,p), zp=(g,m1,k1,g1,m2,k2,g2)"""
+        """ The Hamiltonian function, depending on z=pack(q,p), zp=(g,m1,m2,k1,k2,l1,l2)"""
         raise NotImplementedError 
 
     def sample_initial_conditions(self,bs,changedist,rescaleKG,scale):
