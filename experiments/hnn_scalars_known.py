@@ -22,7 +22,7 @@ def makeTrainerScalars(*,num_epochs=100,seed=2022,
                        bs=16,lr=1e-3,device='cuda',  
                        net_config={'n_layers':3,'n_hidden':10}, log_level='info',
                        trainer_config={'log_dir':'/home/','log_args':{'minPeriod':.02,'timeFrac':.75},},
-                       save=False,):
+                       save=False,trial=1):
     logging.getLogger().setLevel(levels[log_level])
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
