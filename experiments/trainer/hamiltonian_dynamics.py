@@ -340,6 +340,7 @@ class KnownDynamicsTrainer(Regressor):
                 partial(log_rollout_error_known,loader.dataset,self.model)
             )
         )}
+        print(step, metrics)
         self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)
         
