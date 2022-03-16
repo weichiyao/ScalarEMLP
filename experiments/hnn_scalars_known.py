@@ -1,5 +1,5 @@
 from emlp.nn import InvarianceKnown
-from trainer.hamiltonian_dynamics import KnownDynamicsTrainer,hnnScalarsKnown_trial
+from trainer.hamiltonian_dynamics import KnownDynamicsTrainer,hnnScalarsKnown_trial,KnownData
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr,FixedNumpySeed,FixedPytorchSeed
 from trainer.utils import LoaderTo
