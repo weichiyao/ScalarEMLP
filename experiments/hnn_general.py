@@ -40,7 +40,7 @@ def makeTrainer(data_config={'datasource':'/home/data.pickle',
     dataloaders['Train'] = dataloaders['train']
     
     # Trainer
-    model = InvarianceGeneral(**net_config)
+    model = InvarianceLayerGeneral(transformer=stransformer,**net_config)
     opt_constr = objax.optimizer.Adam 
     lr_sched = lambda e: lr  
     
