@@ -457,7 +457,7 @@ class DimensionlessDP(object):
 
 
 @export
-class ScalarTransformer:
+class ScalarTransformer(object):
     """Transform (dimensionless) features using quantiles info or radial basis function.
     
     During the initialization stage, this method takes the whole training data set, 
