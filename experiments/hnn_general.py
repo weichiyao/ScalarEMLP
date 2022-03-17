@@ -17,13 +17,13 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
 
 def makeTrainer(*,data_config={'datasource':'/home/data.pickle', 'test_id':1, 'chunk_len':5, 'ntrain_out':None},
                           seed=2022, num_epochs=100,
-                          bs=16,lr=1e-3,max_grad_norm=0.5,device='cuda',
+                          bs=16,lr=1e-3,device='cuda',
                           transformer_config={
                               'method':'none', 'dimensionless':False, 'n_rad':50, 
                               'n_quantiles':200, 'transform_distribution':'uniform'
                           },
                           net_config={'n_layers':3,'n_hidden':10,'div':1}, 
-                          trainer_config={'log_dir':'/home/',
+                          trainer_config={'max_grad_norm':0.5,'log_dir':'/home/',
                                           'log_args':{'minPeriod':.02,'timeFrac':.75},},
                           log_level='info', save=False):  
           
@@ -45,7 +45,7 @@ def makeTrainer(*,data_config={'datasource':'/home/data.pickle', 'test_id':1, 'c
     lr_sched = lambda e: lr  
     
     return GeneralDynamicsTrainer(
-        model,dataloaders,opt_constr,lr_sched,max_grad_norm,**trainer_config
+        model,dataloaders,opt_constr,lr_sched,**trainer_config
     )
   
 if __name__ == "__main__":
