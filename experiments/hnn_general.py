@@ -1,4 +1,4 @@
-from emlp.nn import InvarianceLayerGeneral, ScalarTransformerGeneral
+from emlp.nn import InvarianceLayerGeneral,ScalarTransformerGeneral
 from trainer.hamiltonian_dynamics import GeneralDynamicsTrainer,GeneralData,TrialHNN
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr,FixedNumpySeed,FixedPytorchSeed
@@ -32,7 +32,7 @@ def makeTrainer(data_config={'datasource':'/home/data.pickle',
         gdata = GeneralData(**data_config)
     
     # Create the transformer 
-    stransformer = ScalarTransformerDP(zs=gdata.Zs, pv=gdata.PV, ps=gdata.PS, **transformer_config)
+    stransformer = ScalarTransformerGeneral(zs=gdata.Zs, pv=gdata.PV, ps=gdata.PS, **transformer_config)
     
     # Create data loaders
     dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
