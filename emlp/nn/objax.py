@@ -597,7 +597,7 @@ class ScalarTransformer(object):
             'none': self._none_transform
         }
     
-    def _compute_dimensionless(self):
+    def _compute_dimensionless(self, scalars):
         self.n_scaling = 1
         self.dimensionless_operator = lambda x: (x, jnp.ones((self.n_scaling,))) 
         self.scaling_standardization = jnp.vstack([jnp.zeros((self.n_scaling,)),jnp.ones((self.n_scaling,))])
@@ -761,6 +761,7 @@ class ScalarTransformer(object):
     def __call__(self, x, pv=None, ps=None): 
         # Compute inner product scalars 
         scalars = self._compute_scalars(x, pv, ps)
+        
         # Create dimensionless features 
         scalars, scaling = self.dimensionless_operator(scalars)
         
@@ -783,9 +784,9 @@ class ScalarTransformerGeneral(ScalarTransformer):
 
         if pv is not None: 
             pv = pv.reshape(-1,self.n_pv,3)
-            vx = jnp.einsum("...ij,...ij", pv, x).reshape(n, -1) # (n, l*l)
-            vv = jnp.einsum('bix,bjx->bij', pv, pv).reshape(n, -1)  # (n, m*m)
-            vvsqrt = jnp.sqrt(vv) # (n, m*m)
+            vx = jnp.einsum("...ij,...ij", pv, x).reshape(n, -1) # (n, l*m)
+            vv = jnp.einsum('bix,bjx->bij', pv, pv).reshape(n, -1)  # (n, l*l)
+            vvsqrt = jnp.sqrt(vv) # (n, l*l)
             scalars = jnp.concatenate([scalars, vx, vv, vvsqrt], axis=-1)
         if ps is not None:
             scalars = jnp.concatenate([scalars, ps, 1/ps], axis=-1)
@@ -809,7 +810,7 @@ class ScalarTransformerDP(ScalarTransformer):
     """Transform (dimensionless) features using quantiles info or radial basis function.
     
     During the initialization stage, this method takes the whole training data set, 
-    zs (n,4,3), pv (n,3) and ps (n,6), and conducts the following transformation: 
+    zs (n,12), pv (n,3) and ps (n,6), and conducts the following transformation: 
                 zs, pv, ps
         Step 0  => inner product scalars 
         Step 1  => dimensionless scalars                   (optional, dimensionless = True)
@@ -825,7 +826,7 @@ class ScalarTransformerDP(ScalarTransformer):
     
     Arguments
     ----------
-    zs : jax.numpy.ndarray (n, 4, 3)
+    zs : jax.numpy.ndarray (n, 12)
         Double pendulum TRAINING data positions and velocities q1, q2, p1, p2
     pv : jax.numpy.ndarray (n, 3) 
         Double pendulum TRAINING data parameters g
@@ -864,8 +865,11 @@ class ScalarTransformerDP(ScalarTransformer):
         # print(f"Dimension of features is {scalars.shape[1]}, and the rank is {jnp.linalg.matrix_rank(scalars)}")
      
     def _compute_scalars(self, x, pv, ps):
-        """Input x of dim (n,4,3), pv = g of dim (n,3), ps = (m1, m2, k1, k2, l1, l2) of (n,6)"""
+        """Input x of dim (...,12), pv = g of dim (...,3), ps = (m1, m2, k1, k2, l1, l2) of (...,6)"""
         idx, idx_sqrt, idx_map = self._create_index()
+        x = x.reshape(-1,4,3)
+        pv = pv.reshape(-1,3)
+        ps = ps.reshape(-1,6)
         # get q2 - q1 replacing q2
         x = x.at[:,1,:].set(x[:,1,:]-x[:,0,:])  
         xx = jnp.sum(
@@ -885,10 +889,10 @@ class ScalarTransformerDP(ScalarTransformer):
         return scalars  
 
     def __call__(self, x, pv, ps): 
+        """Input x of dim (...,12), pv = g of dim (...,3), ps = (m1, m2, k1, k2, l1, l2) of (...,6)"""
         # Compute inner product scalars 
-        scalars = self._compute_scalars(
-            x.reshape(-1,4,3), pv.reshape(-1,3), ps.reshape(-1,6)
-        )
+        scalars = self._compute_scalars(x, pv, ps)
+        
         # Create dimensionless features 
         scalars, scaling = self.dimensionless_operator(scalars)
         
