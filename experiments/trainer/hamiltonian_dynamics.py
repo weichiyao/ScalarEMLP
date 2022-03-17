@@ -649,7 +649,7 @@ from collections.abc import Iterable
 
 
 @export
-class NODE_trial(object):
+class TrialNODE(object):
     """ A training trial for the Neural ODEs, contains lots of boiler plate which is not necessary.
         Feel free to use your own."""
     def __init__(self,make_trainer,strict=True):
@@ -685,7 +685,7 @@ class NODE_trial(object):
     
     
 @export
-class HNN_trial(object):
+class TrialHNN(object):
     """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
         Feel free to use your own."""
     def __init__(self,make_trainer,strict=True):
