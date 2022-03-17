@@ -697,18 +697,12 @@ class TrialNODE(object):
         self.make_trainer = make_trainer
         self.strict=strict
     def __call__(self,cfg):
-        try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            i = cfg['trial']
-            orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-            cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
+        try: 
+            save = cfg.pop('save',False) 
             trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
             trainer.train(cfg['num_epochs'])
             # if save: cfg['saved_at']=trainer.save_checkpoint()
-            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_NODEs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{i}"
+            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_NODEs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{cfg['trial']}"
             if save:
                 # Pickling
                 pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
@@ -734,17 +728,10 @@ class TrialHNN(object):
         self.strict=strict
     def __call__(self,cfg):
         try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            i=cfg['trial']
-            orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-            cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
+            save = cfg.pop('save',False) 
             trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
             trainer.train(cfg['num_epochs'])
-            # if save: cfg['saved_at']=trainer.save_checkpoint()
-            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{i}"
+            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{cfg['trial']}"
             if save:
                 # Pickling
                 pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
