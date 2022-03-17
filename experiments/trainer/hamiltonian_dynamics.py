@@ -287,14 +287,9 @@ class DoubleSpringPendulum(HamiltonianDataset):
         return CoupledPendulumAnimation
 
 class MakeDataset(Dataset):
-    def __init__(self, zs, t, pv=None, ps=None):
+    def __init__(self, zs, t, pv, ps):
         self.zs = zs 
-        self.t = t
-        self.n = zs.shape[0]
-        if pv is None:
-           pv = np.full((self.n,1), None)
-        if ps is None:
-           ps = np.full((self.n,1), None)
+        self.t = t 
         self.pv = pv
         self.ps = ps
 
@@ -330,12 +325,14 @@ class GeneralData(object):
         test_data = ret[mask_test] # (batch_size, 90, 7)
         
         self.Zs = train_data[:,:,1:]
-        self.PV = None
-        self.PS = None 
+        self.PV = [None]
+        self.PS = [None] 
         
+        pv = np.full((ndata,1), None)
+        ps = np.full((ndata,1), None)
         # Make Dataset
-        self.trainset = MakeDataset(train_data[:,:,1:], train_data[:,:,0], None, None)
-        self.testset = MakeDataset(test_data[:,:,1:], test_data[:,:,0], None, None)
+        self.trainset = MakeDataset(train_data[:,:,1:], train_data[:,:,0], pv, ps)
+        self.testset = MakeDataset(test_data[:,:,1:], test_data[:,:,0], pv, ps)
 
     def __call__(self):
         return {"train": self.trainset, "val": self.testset, "test": self.testset}
