@@ -328,11 +328,15 @@ class GeneralData(object):
         self.PV = [None]
         self.PS = [None] 
         
-        pv = np.full((ndata,1), None)
-        ps = np.full((ndata,1), None)
+        train_pv = np.full((train_data.shape[0],1), None)
+        train_ps = np.full((train_data.shape[0],1), None)
+        
+        test_pv = np.full((test_data.shape[0],1), None)
+        test_ps = np.full((test_data.shape[0],1), None)
+        
         # Make Dataset
-        self.trainset = MakeDataset(train_data[:,:,1:], train_data[:,:,0], pv, ps)
-        self.testset = MakeDataset(test_data[:,:,1:], test_data[:,:,0], pv, ps)
+        self.trainset = MakeDataset(train_data[:,:,1:], train_data[:,:,0], train_pv, train_ps)
+        self.testset = MakeDataset(test_data[:,:,1:], test_data[:,:,0], test_pv, test_ps)
 
     def __call__(self):
         return {"train": self.trainset, "val": self.testset, "test": self.testset}
