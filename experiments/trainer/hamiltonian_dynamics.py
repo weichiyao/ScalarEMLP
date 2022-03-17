@@ -329,6 +329,10 @@ class GeneralData(object):
         ) # (batch_size, chunk_len, 7)
         test_data = ret[mask_test] # (batch_size, 90, 7)
         
+        self.Zs = train_data[:,:,1:]
+        self.PV = None
+        self.PS = None 
+        
         # Make Dataset
         self.trainset = MakeDataset(train_data[:,:,1:], train_data[:,:,0], None, None)
         self.testset = MakeDataset(test_data[:,:,1:], test_data[:,:,0], None, None)
