@@ -298,8 +298,10 @@ class MakeDataset(Dataset):
 
     def __getitem__(self, i): 
         zp = dict()
-        try: self.pv[i] else: zp["pv"] = self.pv[i]
-        try: self.ps[i] else: zp["ps"] = self.ps[i]
+        try: zp["pv"] = self.pv[i] 
+        except: pass
+        try: zp["ps"] = self.ps[i] 
+        except: pass
            
         return (self.zs[i, 0], self.t[i], zp), self.zs[i]
 
