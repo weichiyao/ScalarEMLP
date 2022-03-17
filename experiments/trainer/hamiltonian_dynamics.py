@@ -365,9 +365,6 @@ class GeneralData(object):
                 axis = 0
             )
         return chunked_zs
-
-      
-      
      
 class IntegratedDynamicsTrainer(Regressor):
     """ A trainer for training the Hamiltonian Neural Networks. Feel free to use your own instead."""
@@ -567,7 +564,6 @@ class Animation(object):
         self.ax.set_ylim(lims[1])
         if d==3: self.ax.set_zlim(lims[2])
         if d!=3: self.ax.set_aspect("equal")
-        #elf.ax.auto_scale_xyz()
         empty = d*[[]]
         self.colors = np.random.choice([f"C{i}" for i in range(10)],size=n,replace=False)
         self.objects = {
@@ -580,7 +576,6 @@ class Animation(object):
         for obj in self.objects.values():
             for elem in obj:
                 elem.set_data(*empty)
-                #if self.qt.shape[-1]==3: elem.set_3d_properties([])
         return sum(self.objects.values(),[])
 
     def update(self, i=0):
@@ -589,14 +584,10 @@ class Animation(object):
         for j in range(n):
             # trails
             xyz = self.qt[max(i - trail_len,0): i + 1,j,:]
-            #chunks = xyz.shape[0]//10
-            #xyz_chunks = torch.chunk(xyz,chunks)
-            #for i,xyz in enumerate(xyz_chunks):
             self.objects['traj_lines'][j].set_data(*xyz[...,:2].T)
             if d==3: self.objects['traj_lines'][j].set_3d_properties(xyz[...,2].T)
             self.objects['pts'][j].set_data(*xyz[-1:,...,:2].T)
             if d==3: self.objects['pts'][j].set_3d_properties(xyz[-1:,...,2].T)
-        #self.fig.canvas.draw()
         return sum(self.objects.values(),[])
 
     def animate(self):
@@ -643,8 +634,7 @@ class CoupledPendulumAnimation(PendulumAnimation):
     def __init__(self, *args, spring_lw=.6,spring_r=.2,**kwargs):
         super().__init__(*args, **kwargs)
         empty = self.qt.shape[-1]*[[]]
-        self.objects["springs"] = self.ax.plot(*empty,c='k',lw=spring_lw)#
-        #self.objects["springs"] = sum([self.ax.plot(*empty,c='k',lw=2) for _ in range(self.n-1)],[])
+        self.objects["springs"] = self.ax.plot(*empty,c='k',lw=spring_lw)
         self.helix = helix(200,radius=spring_r,turns=10)
         
     def update(self,i=0):
@@ -659,7 +649,7 @@ from collections.abc import Iterable
 
 
 @export
-class odeScalars_trial(object):
+class ode_trial(object):
     """ A training trial for the Neural ODEs, contains lots of boiler plate which is not necessary.
         Feel free to use your own."""
     def __init__(self,make_trainer,strict=True):
@@ -695,7 +685,7 @@ class odeScalars_trial(object):
     
     
 @export
-class hnnScalars_trial(object):
+class hnn_trial(object):
     """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
         Feel free to use your own."""
     def __init__(self,make_trainer,strict=True):
@@ -734,40 +724,3 @@ class hnnScalars_trial(object):
         return cfg, outcome
 
 
-@export
-class hnnScalarsGeneral_trial(object):
-    """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
-        Feel free to use your own."""
-    def __init__(self,make_trainer,strict=True):
-        self.make_trainer = make_trainer
-        self.strict=strict
-    def __call__(self,cfg):
-        try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            i=cfg['trial']
-            orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-            cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
-            trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
-            trainer.train(cfg['num_epochs']) 
-            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_HNNs'}_n{cfg['ndata']}_{cfg['transformer_config']}_{i}"
-            if save:
-                # Pickling
-                pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
-                 
-            outcome = trainer.ckpt['outcome']
-            # we could have more than one test sets
-            testname_all = [s for s in trainer.dataloaders.keys() if s not in ['val', 'train', 'Train']]
-            for testname in testname_all:
-                trajectories = []
-                for mb in trainer.dataloaders[testname]:
-                    trajectories.append(pred_and_gt_general(trainer.dataloaders[testname].dataset,trainer.model,mb))
-                torch.save(np.concatenate(trajectories), savefilename_prefix+"_traj_"+testname+".t")
-                
-        except Exception as e:
-            if self.strict: raise
-            outcome = e
-        del trainer
-        return cfg, outcome
