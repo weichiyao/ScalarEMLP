@@ -1,5 +1,5 @@
 from emlp.nn import InvarianceLayerDP, ScalarTransformerDP
-from trainer.hamiltonian_dynamics import IntegratedDynamicsTrainer,DoubleSpringPendulum,HNN_trial
+from trainer.hamiltonian_dynamics import IntegratedDynamicsTrainer,DoubleSpringPendulum,TrialHNN
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr,FixedNumpySeed,FixedPytorchSeed
 from trainer.utils import LoaderTo
@@ -104,7 +104,7 @@ def makeTrainer(*,dataset=DoubleSpringPendulum,num_epochs=250,ndata=30600,seed=2
     )
 
 if __name__ == "__main__":
-    Trial = HNN_trial(makeTrainer)
-    cfg, outcome = Trial(argupdated_config(makeTrainer.__kwdefaults__))
+    trial_hnn = TrialHNN(makeTrainer)
+    cfg, outcome = trial_hnn(argupdated_config(makeTrainer.__kwdefaults__))
     print(outcome)
 
