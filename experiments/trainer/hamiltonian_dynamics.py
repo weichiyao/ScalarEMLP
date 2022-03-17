@@ -125,7 +125,7 @@ class HamiltonianDataset(Dataset):
         return self.Zs.shape[0]
 
     def __getitem__(self, i):
-        return (self.Zs[i, 0], self.T, self.PV[i], self.PS[i]), self.Zs[i]
+        return (self.Zs[i, 0], self.T, {"pv":self.PV[i], "ps":self.PS[i]}), self.Zs[i]
 
     def integrate(self, z0s, ts, pv, ps):
         return HamiltonianFlow(self.H, z0s, ts, pv, ps)
