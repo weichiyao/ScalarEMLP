@@ -292,9 +292,9 @@ class MakeDataset(Dataset):
         self.t = t
         self.n = zs.shape[0]
         if pv is None:
-           pv = np.full((self.n,), None)
+           pv = np.full((self.n,1), None)
         if ps is None:
-           ps = np.full((self.n,), None)
+           ps = np.full((self.n,1), None)
         self.pv = pv
         self.ps = ps
 
