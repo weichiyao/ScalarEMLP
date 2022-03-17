@@ -23,7 +23,7 @@ def makeTrainer(data_config={'datasource':'/home/data.pickle',
                     'method':'none', 'dimensionless':False, 'n_rad':50, 
                     'n_quantiles':200, 'transform_distribution':'uniform'
                 },
-                net_config={'n_layers':3,'n_hidden':10}, 
+                net_config={'n_layers':3,'n_hidden':10,'div':1}, 
                 trainer_config={'log_dir':'/home/',
                                 'log_args':{'minPeriod':.02,'timeFrac':.75},},
                 save=False):   
