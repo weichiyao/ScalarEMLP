@@ -1,5 +1,5 @@
 from emlp.nn import EquivarianceLayerDP, ScalarTransformerDP 
-from trainer.hamiltonian_dynamics import IntegratedODETrainer,DoubleSpringPendulum,odeDP_trial
+from trainer.hamiltonian_dynamics import IntegratedODETrainer,DoubleSpringPendulum,ode_trial
 from torch.utils.data import DataLoader
 from oil.utils.utils import FixedNumpySeed,FixedPytorchSeed
 from trainer.utils import LoaderTo 
@@ -58,6 +58,6 @@ def makeTrainer(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000,seed=2
     )
 
 if __name__ == "__main__":
-    Trial = odeDP_trial(makeTrainer)
+    Trial = ode_trial(makeTrainer)
     cfg,outcome = Trial(argupdated_config(makeTrainer.__kwdefaults__))
     print(outcome)
