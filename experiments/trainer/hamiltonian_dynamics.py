@@ -56,15 +56,15 @@ def HamiltonianFlow(H,z0,T,pv=None,ps=None):
         to rolled out trajectory at time points T.
         z0 shape (state_dim,) and T shape (t,) yields (t,state_dim) rollout."""
     dynamics = lambda z,t,pv,ps: hamiltonian_dynamics(H,z,t,pv,ps)
-    return odeint(dynamics, z0, T, pv, ps, rtol=1e-7, atol=1e-7)#.transpose((1,0,2))
+    return odeint(dynamics, z0, T, pv, ps, rtol=1e-4, atol=1e-4)#.transpose((1,0,2))
 
-def BHamiltonianFlow(H,z0,T,pv=None,ps=None,tol=1e-7):
+def BHamiltonianFlow(H,z0,T,pv=None,ps=None,tol=1e-4):
     """ Batched version of HamiltonianFlow, essentially equivalent to vmap(HamiltonianFlow),
         z0 of shape (bs,state_dim) and T of shape (t,) yields (bs,t,state_dim) rollouts """
     dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None,0,0)))
     return odeint(dynamics, z0, T, pv, ps, rtol=tol).transpose((1,0,2))
 
-def BOdeFlow(dynamics,z0,T,pv=None,ps=None,tol=1e-7):
+def BOdeFlow(dynamics,z0,T,pv=None,ps=None,tol=1e-4):
     """ Batched integration of ODE dynamics into rollout trajectories.
         Given dynamics (state_dim->state_dim) and z0 of shape (bs,state_dim)
         and T of shape (t,) outputs trajectories (bs,t,state_dim) """
@@ -447,11 +447,11 @@ class GeneralDynamicsTrainer(Regressor):
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
         (z0,ts,zp),true_zs = minibatch
-        try: pv = zp["pv"]
-        except: pv = None  
-        try: ps = zp["ps"] 
-        except: ps = None   
-        pred_zs=BHamiltonianFlow(self.model,z0,ts[0],ps,pv)
+        # try: pv = zp["pv"]
+        # except: pv = None  
+        # try: ps = zp["ps"] 
+        # except: ps = None   
+        pred_zs=BHamiltonianFlow(self.model,z0,ts[0],None,None)
         return jnp.mean((pred_zs-true_zs)**2)
 
     def metrics(self, loader):
@@ -478,11 +478,11 @@ def log_rollout_error_general(model,minibatch):
         error computed between the dataset ds and HNN model
         on the initial condition in the minibatch."""
     (z0,ts,zp),gt_zs = minibatch
-    try: pv = zp["pv"]
-    except: pv = None  
-    try: ps = zp["ps"] 
-    except: ps = None  
-    pred_zs = BHamiltonianFlow(model,z0,ts[0],pv,ps)
+    # try: pv = zp["pv"]
+    # except: pv = None  
+    # try: ps = zp["ps"] 
+    # except: ps = None  
+    pred_zs = BHamiltonianFlow(model,z0,ts[0],None,None)
     errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
     clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
     log_geo_mean = jnp.log(clamped_errs).mean()
