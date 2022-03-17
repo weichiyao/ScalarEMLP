@@ -797,7 +797,7 @@ class ScalarTransformerGeneral(ScalarTransformer):
         # Compute inner product scalars 
         scalars = self._compute_scalars(x, pv, ps)
         # Create dimensionless features 
-        scalars, _ = self.dimensionless_operator(scalars)
+        scalars, scaling = self.dimensionless_operator(scalars)
         
         # Standardize scalings 
         scaling = (scaling - self.scaling_standardization[0]) / self.scaling_standardization[1]
