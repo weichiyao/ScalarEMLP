@@ -294,7 +294,7 @@ class MakeDataset(Dataset):
         self.ps = ps
 
     def __len__(self):
-        return self.n
+        return self.zs.shape[0]
 
     def __getitem__(self, i): 
         return (self.zs[i, 0], self.t[i], self.pv[i], self.ps[i]), self.zs[i]
