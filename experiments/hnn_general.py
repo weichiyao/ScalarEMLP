@@ -15,19 +15,19 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
           'warn': logging.WARNING,'warning': logging.WARNING,
           'info': logging.INFO,'debug': logging.DEBUG}
 
-def makeTrainer(data_config={'datasource':'/home/data.pickle',
-                             'itest':[1], 'chunk_len':5, 'ntrain_out':None},
-                seed=2022, 
-                bs=16,lr=1e-3,max_grad_norm=0.5,device='cuda',
-                transformer_config={
-                    'method':'none', 'dimensionless':False, 'n_rad':50, 
-                    'n_quantiles':200, 'transform_distribution':'uniform'
-                },
-                net_config={'n_layers':3,'n_hidden':10,'div':1}, 
-                trainer_config={'log_dir':'/home/',
-                                'log_args':{'minPeriod':.02,'timeFrac':.75},},
-                save=False):   
-  
+def makeTrainer(*,data_config={'datasource':'/home/data.pickle', 'test_id':1, 'chunk_len':5, 'ntrain_out':None},
+                          seed=2022, 
+                          bs=16,lr=1e-3,max_grad_norm=0.5,device='cuda',
+                          transformer_config={
+                              'method':'none', 'dimensionless':False, 'n_rad':50, 
+                              'n_quantiles':200, 'transform_distribution':'uniform'
+                          },
+                          net_config={'n_layers':3,'n_hidden':10,'div':1}, 
+                          trainer_config={'log_dir':'/home/',
+                                          'log_args':{'minPeriod':.02,'timeFrac':.75},},
+                          log_level='info', save=False):  
+          
+    logging.getLogger().setLevel(levels[log_level])
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
         gdata = GeneralData(**data_config)
     
