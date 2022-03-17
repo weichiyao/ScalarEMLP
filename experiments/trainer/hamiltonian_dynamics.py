@@ -4,7 +4,6 @@ from jax.experimental.ode import odeint
 import jax.numpy as jnp
 import objax
 from oil.utils.utils import Named
-from oil.tuning.configGenerator import flatten_dict
 from oil.utils.utils import export
  
 import os
