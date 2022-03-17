@@ -82,12 +82,12 @@ class ScalarEMLP(Module, metaclass=Named):
             n_in=n_in, n_out=1, n_hidden=n_hidden, n_layers=n_layers, div=div
         )   
     
-    def H(self, x, pv=[None], ps=[None]):  
+    def H(self, x, pv=None, ps=None):  
         scalars, _ = self.transformer(x,pv,ps)  
         out = self.mlp(scalars)
         return out.sum()  
     
-    def __call__(self, x, pv=[None], ps=[None], training = True):
+    def __call__(self, x, pv=None, ps=None, training = True):
         return self.H(x, pv, ps)
 
 @export
@@ -111,7 +111,7 @@ class EquivarianceLayerGeneral(ScalarEMLP):
             n_in=n_in, n_out=n_out, n_hidden=n_hidden, n_layers=n_layers, div=div
         )   
 
-    def __call__(self, x, t, pv=[None], ps=[None]):
+    def __call__(self, x, t, pv=None, ps=None):
         scalars, _ = self.transformer(x, pv, ps) # (n, n_in)
         out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n, n_out, 1)
         term_x = out[:,:self.n_zs**2].reshape(-1,self.n_zs,self.n_zs,1)
@@ -119,7 +119,7 @@ class EquivarianceLayerGeneral(ScalarEMLP):
             term_x*jnp.expand_dims(x, 1), 
             axis=-2
         ) # (n,m,3)
-        if pv[0] is not None:
+        if pv is not None:
             term_v = out[:,self.n_zs**2:].reshape(-1,self.n_zs,self.n_pv,1)
             ret += jnp.sum(
                 term_v*jnp.expand_dims(pv, 1), 
@@ -148,12 +148,12 @@ class InvarianceLayerGeneral(ScalarEMLP):
             div=div
         )    
 
-    def H(self, x, pv=[None], ps=[None]):  
+    def H(self, x, pv=None, ps=None):  
         scalars, _ = self.transformer(x, pv, ps)  
         out = self.mlp(scalars)  
         return out.sum()  
     
-    def __call__(self, x, pv=[None], ps=[None], training = True):
+    def __call__(self, x, pv=None, ps=None, training = True):
         return self.H(x, pv, ps)
  
 
@@ -178,12 +178,12 @@ class InvarianceLayerDP(ScalarEMLP):
             div=div
         )   
     
-    def H(self, x, pv=[None], ps=[None]):  
+    def H(self, x, pv=None, ps=None):  
         scalars, scaling = self.transformer(x,pv,ps)  
         out = scaling * self.mlp(scalars)  
         return out.sum()  
     
-    def __call__(self, x, pv=[None], ps=[None], training=True):
+    def __call__(self, x, pv=None, ps=None, training=True):
         return self.H(x, pv, ps)
  
 @export
@@ -545,8 +545,8 @@ class ScalarTransformer(object):
     def __init__(
         self, 
         zs, 
-        pv=[None],
-        ps=[None], 
+        pv=None,
+        ps=None, 
         method: str = 'none', 
         dimensionless: bool = False,
         n_rad: int = 100,
@@ -557,10 +557,10 @@ class ScalarTransformer(object):
         self.n_zs = zs.shape[-1] // 3
         self.n_pv = 0 
         self.n_ps = 0
-        if pv[0] is not None:
+        if pv is not None:
             pv = jnp.array(pv)
             self.n_pv = pv.shape[-1] // 3
-        if ps[0] is not None:
+        if ps is not None:
             ps = jnp.array(ps)
             self.n_ps = ps.shape[-1]  
         
@@ -755,10 +755,10 @@ class ScalarTransformer(object):
         # identity function so we let X_col unchanged
         return X_col
     
-    def _compute_scalars(self, x, pv=[None], ps=[None]):
+    def _compute_scalars(self, x, pv=None, ps=None):
         raise NotImplementedError
 
-    def __call__(self, x, pv=[None], ps=[None]): 
+    def __call__(self, x, pv=None, ps=None): 
         # Compute inner product scalars 
         scalars = self._compute_scalars(x, pv, ps)
         
@@ -773,7 +773,7 @@ class ScalarTransformer(object):
 
 @export
 class ScalarTransformerGeneral(ScalarTransformer):
-    def _compute_scalars(self, x, pv=[None], ps=[None]):
+    def _compute_scalars(self, x, pv=None, ps=None):
         """Input x of dim (...,m*3), param vector input of (...,l*3) scalar input of (...,k)"""
         x = x.reshape(-1,self.n_zs,3)
         n = x.shape[0]
@@ -782,17 +782,17 @@ class ScalarTransformerGeneral(ScalarTransformer):
         xxsqrt = jnp.sqrt(jnp.einsum('bix,bix->bi', x, x))    
         scalars = jnp.concatenate([xx, xxsqrt], axis=-1)
 
-        if pv[0] is not None: 
+        if pv is not None: 
             pv = pv.reshape(-1,self.n_pv,3)
             vx = jnp.einsum("...ij,...ij", pv, x).reshape(n, -1) # (n, l*m)
             vv = jnp.einsum('bix,bjx->bij', pv, pv).reshape(n, -1)  # (n, l*l)
             vvsqrt = jnp.sqrt(vv) # (n, l*l)
             scalars = jnp.concatenate([scalars, vx, vv, vvsqrt], axis=-1)
-        if ps[0] is not None:
+        if ps is not None:
             scalars = jnp.concatenate([scalars, ps, 1/ps], axis=-1)
         return scalars  
 
-    def __call__(self, x, pv=[None], ps=[None]):
+    def __call__(self, x, pv=None, ps=None):
         """Input x of dim (n,m*3), param vector input of (n,l*3) scalar input of (n,k)"""
         # Compute inner product scalars 
         scalars = self._compute_scalars(x, pv, ps)
