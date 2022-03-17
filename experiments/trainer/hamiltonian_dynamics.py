@@ -308,7 +308,7 @@ class GeneralData(object):
     def __init__(
         self,
         datasource='/home/data.pickle',
-        itest=[1],
+        test_id=0,
         chunk_len=5,
         ntrain_out=None
     ):
@@ -317,10 +317,8 @@ class GeneralData(object):
             ret = pickle.load(handle)
         
         # Split the train and test dataset 
-        ndata = ret.shape[0]
-        ntest = len(itest)
-        mask_test = np.full((ndata,), False)
-        mask_test[itest] = True
+        mask_test = np.full((ret.shape[0],), False)
+        mask_test[test_id] = True
         
         train_data = self.chunk_training_data(
             ret[~mask_test], 
