@@ -553,6 +553,7 @@ class ScalarTransformer(object):
         n_quantiles: int = 1000, 
         transform_distribution: str = 'uniform'   
     ):  
+        super().__init__()
         zs = jnp.array(zs)
         self.n_zs = zs.shape[-1] // 3
         self.n_pv = 0 
@@ -833,6 +834,62 @@ class ScalarTransformerDP(ScalarTransformer):
     ps : jax.numpy.ndarray (n, 6) 
         Double pendulum TRAINING data parameters m1, m2, k1, k2, l1, l2
     """  
+    def __init__(
+        self, 
+        zs, 
+        pv=None,
+        ps=None, 
+        method: str = 'none', 
+        dimensionless: bool = False,
+        n_rad: int = 100,
+        n_quantiles: int = 1000, 
+        transform_distribution: str = 'uniform'   
+    ):  
+        zs = jnp.array(zs)
+        self.n_zs = zs.shape[-1] // 3
+        self.n_pv = 0 
+        self.n_ps = 0
+        if pv is not None:
+            pv = jnp.array(pv)
+            self.n_pv = pv.shape[-1] // 3
+        if ps is not None:
+            ps = jnp.array(ps)
+            self.n_ps = ps.shape[-1]  
+        
+        self.dimensionless = dimensionless
+        # Create inner product scalars
+        scalars = self._compute_scalars(zs, pv, ps)   
+        print(f"Scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
+        print(f"Scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
+        
+        # Create dimensionless parameters 
+        self._compute_dimensionless(scalars)
+
+        self.method = method
+        self.n_rad = n_rad
+        self.n_quantiles = n_quantiles
+        self.transform_distribution = transform_distribution
+        
+        # Create the quantiles of reference
+        self.references = jnp.linspace(0, 1, self.n_quantiles, endpoint=True)
+        self.BOUNDS_THRESHOLD = 1e-7 
+        self.spacing = jnp.array(np.spacing(1)) 
+        
+        self._GETPARAMS = {
+            'qt': self._get_qt_params,
+            'rbf': self._get_rbf_params, 
+            'none': self._get_none_params
+        }
+        
+        # Compute the global quansformation parameters
+        self._GETPARAMS[self.method](scalars)
+       
+        self._TRANSFORMS = {
+            'qt': self._qt_transform,
+            'rbf': self._rbf_transform,
+            'none': self._none_transform
+        }
+        
     def _create_index(self):
         """create the indexing for the construction of the inner product scalars"""
         idx = jnp.array(
