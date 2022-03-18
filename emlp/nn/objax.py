@@ -585,7 +585,7 @@ class ScalarTransformer(object):
             'none': lambda x: None,
             'qt': self._get_qt_params,
             'rbf': self._get_rbf_params, 
-            'std': self._std_transform
+            'std': self._get_std_params
         }
         self._TRANSFORMS = {
             'none': lambda x: x,
