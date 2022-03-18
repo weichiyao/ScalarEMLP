@@ -447,11 +447,11 @@ class GeneralDynamicsTrainer(Regressor):
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
         (z0,ts,zp),true_zs = minibatch
-        # try: pv = zp["pv"]
-        # except: pv = None  
-        # try: ps = zp["ps"] 
-        # except: ps = None   
-        pred_zs=BHamiltonianFlow(self.model,z0,ts[0],None,None)
+        try: pv = zp["pv"]
+        except: pv = None  
+        try: ps = zp["ps"] 
+        except: ps = None   
+        pred_zs=BHamiltonianFlow(self.model,z0,ts[0],pv,ps)
         return jnp.mean((pred_zs-true_zs)**2)
 
     def metrics(self, loader):
@@ -478,11 +478,11 @@ def log_rollout_error_general(model,minibatch):
         error computed between the dataset ds and HNN model
         on the initial condition in the minibatch."""
     (z0,ts,zp),gt_zs = minibatch
-    # try: pv = zp["pv"]
-    # except: pv = None  
-    # try: ps = zp["ps"] 
-    # except: ps = None  
-    pred_zs = BHamiltonianFlow(model,z0,ts[0],None,None)
+    try: pv = zp["pv"]
+    except: pv = None  
+    try: ps = zp["ps"] 
+    except: ps = None  
+    pred_zs = BHamiltonianFlow(model,z0,ts[0],pv,ps)
     errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
     clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
     log_geo_mean = jnp.log(clamped_errs).mean()
@@ -748,4 +748,34 @@ class TrialHNN(object):
         del trainer
         return cfg, outcome
 
-
+@export
+class GeneralTrialHNN(object):
+    """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
+        Feel free to use your own."""
+    def __init__(self,make_trainer,strict=True):
+        self.make_trainer = make_trainer
+        self.strict=strict
+    def __call__(self,cfg):
+        try:
+            save = cfg.pop('save',False) 
+            trainer = self.make_trainer(**cfg)
+            trainer.train(cfg['num_epochs'])
+            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/scalarHNNs_ntest{cfg['data_config']['ntest']}_{cfg['trial']}"
+            if save:
+                # Pickling
+                pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
+                 
+            outcome = trainer.ckpt['outcome']
+            # we could have more than one test sets
+            testname_all = [s for s in trainer.dataloaders.keys() if s not in ['val', 'train', 'Train']]
+            for testname in testname_all:
+                trajectories = []
+                for mb in trainer.dataloaders[testname]:
+                    trajectories.append(pred_and_gt(trainer.dataloaders[testname].dataset,trainer.model,mb))
+                torch.save(np.concatenate(trajectories), savefilename_prefix+"_traj_"+testname+".t")
+                
+        except Exception as e:
+            if self.strict: raise
+            outcome = e
+        del trainer
+        return cfg, outcome
