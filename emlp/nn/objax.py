@@ -606,7 +606,7 @@ class ScalarTransformer(object):
         self.scaling_standardization = jnp.vstack([jnp.zeros((self.n_scaling,)),jnp.ones((self.n_scaling,))])
         return scalars
 
-    def _get_none_params(self, x):
+    def _get_std_params(self, x):
         """Gets parameters for standardization transformation:
         
         Arguments 
@@ -669,7 +669,7 @@ class ScalarTransformer(object):
         self.parameters = jnp.nanpercentile(x, self.references*100, axis=0)
         self.n_features = x.shape[1] 
     
-    def _none_transform(self, X):
+    def _std_transform(self, X):
         return (X-self.parameters[0])/self.parameters[1]
 
     def _rbf_transform(self, X):
