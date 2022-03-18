@@ -1,5 +1,5 @@
 from emlp.nn import InvarianceLayerGeneral,ScalarTransformerGeneral
-from trainer.hamiltonian_dynamics import GeneralDynamicsTrainer,GeneralData,TrialHNN
+from trainer.hamiltonian_dynamics import GeneralDynamicsTrainer,GeneralData,GeneralTrialHNN
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr,FixedNumpySeed,FixedPytorchSeed
 from trainer.utils import LoaderTo
@@ -25,7 +25,7 @@ def makeTrainer(*,data_config={'datasource':'/home/data.pickle', 'test_id':1, 'c
                           net_config={'n_layers':3,'n_hidden':10,'div':1}, 
                           trainer_config={'max_grad_norm':0.5,'log_dir':'/home/',
                                           'log_args':{'minPeriod':.02,'timeFrac':.75},},
-                          log_level='info', save=False):  
+                          log_level='info', save=False, trial=1):  
           
     logging.getLogger().setLevel(levels[log_level])
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
@@ -49,7 +49,7 @@ def makeTrainer(*,data_config={'datasource':'/home/data.pickle', 'test_id':1, 'c
     )
   
 if __name__ == "__main__":
-    trial_hnn = TrialHNN(makeTrainer)
+    trial_hnn = GeneralTrialHNN(makeTrainer)
     cfg, outcome = trial_hnn(argupdated_config(makeTrainer.__kwdefaults__))
     print(outcome)
 
