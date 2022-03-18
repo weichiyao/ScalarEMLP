@@ -571,37 +571,40 @@ class ScalarTransformer(object):
         print(f"Scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
         print(f"Scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
         
-        # Create dimensionless parameters 
-        self._compute_dimensionless(scalars)
-
         self.method = method
         self.n_rad = n_rad
         self.n_quantiles = n_quantiles
         self.transform_distribution = transform_distribution
+        
         # Create the quantiles of reference
         self.references = jnp.linspace(0, 1, self.n_quantiles, endpoint=True)
         self.BOUNDS_THRESHOLD = 1e-7 
         self.spacing = jnp.array(np.spacing(1)) 
         
         self._GETPARAMS = {
+            'none': lambda x: pass,
             'qt': self._get_qt_params,
             'rbf': self._get_rbf_params, 
-            'none': self._get_none_params
+            'std': self._std_transform
         }
+        self._TRANSFORMS = {
+            'none': lambda x: x,
+            'qt': self._qt_transform,
+            'rbf': self._rbf_transform,
+            'std': self._std_transform
+        }
+        
+        # Create dimensionless parameters 
+        scalars = self._compute_dimensionless(scalars)
         
         # Compute the global quansformation parameters
         self._GETPARAMS[self.method](scalars)
-       
-        self._TRANSFORMS = {
-            'qt': self._qt_transform,
-            'rbf': self._rbf_transform,
-            'none': self._none_transform
-        }
     
     def _compute_dimensionless(self, scalars):
         self.n_scaling = 1
         self.dimensionless_operator = lambda x: (x, jnp.ones((self.n_scaling,))) 
         self.scaling_standardization = jnp.vstack([jnp.zeros((self.n_scaling,)),jnp.ones((self.n_scaling,))])
+        return scalars
 
     def _get_none_params(self, x):
         """Gets parameters for standardization transformation:
@@ -862,9 +865,6 @@ class ScalarTransformerDP(ScalarTransformer):
         print(f"Scalars min={jnp.round(jnp.min(jnp.abs(scalars), axis=0), 4)}")
         print(f"Scalars max={jnp.round(jnp.max(jnp.abs(scalars), axis=0), 4)}")
         
-        # Create dimensionless parameters 
-        self._compute_dimensionless(scalars)
-
         self.method = method
         self.n_rad = n_rad
         self.n_quantiles = n_quantiles
@@ -876,19 +876,25 @@ class ScalarTransformerDP(ScalarTransformer):
         self.spacing = jnp.array(np.spacing(1)) 
         
         self._GETPARAMS = {
+            'none': lambda x: pass,
             'qt': self._get_qt_params,
             'rbf': self._get_rbf_params, 
-            'none': self._get_none_params
+            'std': self._std_transform
         }
+        self._TRANSFORMS = {
+            'none': lambda x: x,
+            'qt': self._qt_transform,
+            'rbf': self._rbf_transform,
+            'std': self._std_transform
+        }
+        
+        # Create dimensionless parameters 
+        scalars = self._compute_dimensionless(scalars)
         
         # Compute the global quansformation parameters
         self._GETPARAMS[self.method](scalars)
        
-        self._TRANSFORMS = {
-            'qt': self._qt_transform,
-            'rbf': self._rbf_transform,
-            'none': self._none_transform
-        }
+        
         
     def _create_index(self):
         """create the indexing for the construction of the inner product scalars"""
@@ -919,6 +925,7 @@ class ScalarTransformerDP(ScalarTransformer):
                 [jnp.min(scaling, axis=0), jnp.max(scaling, axis=0) - jnp.min(scaling, axis=0)] 
             )
             self.n_scaling = scaling.shape[-1]
+        return scalars 
         # print(f"Dimension of features is {scalars.shape[1]}, and the rank is {jnp.linalg.matrix_rank(scalars)}")
      
     def _compute_scalars(self, x, pv, ps):
