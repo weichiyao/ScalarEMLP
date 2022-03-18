@@ -616,7 +616,7 @@ class ScalarTransformer(object):
         n_features: int 
             number of features in the transformed output
         """  
-        self.parameters = jnp.stack([jnp.mean(x, axis = 0), jnp.std(x, axis = 0)], axis = 0)
+        self.parameters = jnp.stack([jnp.min(x, axis = 0), jnp.max(x, axis = 0)-jnp.min(x, axis = 0)], axis = 0)
         self.n_features = x.shape[-1]
 
     def _get_rbf_params(self, x):
