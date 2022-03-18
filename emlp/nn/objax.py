@@ -596,8 +596,9 @@ class ScalarTransformer(object):
         
         # Create dimensionless parameters 
         scalars = self._compute_dimensionless(scalars)
-        
-        # Compute the global quansformation parameters
+       
+        # Compute the global quansformation parameters 
+        self.n_features = scalars.shape[-1]
         self._GETPARAMS[self.method](scalars)
     
     def _compute_dimensionless(self, scalars):
@@ -892,6 +893,7 @@ class ScalarTransformerDP(ScalarTransformer):
         scalars = self._compute_dimensionless(scalars)
         
         # Compute the global quansformation parameters
+        self.n_features = scalars.shape[-1]
         self._GETPARAMS[self.method](scalars)
        
         
