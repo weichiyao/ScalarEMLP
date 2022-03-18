@@ -15,7 +15,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
           'warn': logging.WARNING,'warning': logging.WARNING,
           'info': logging.INFO,'debug': logging.DEBUG}
 
-def makeTrainer(*,data_config={'datasource':'/home/data.pickle', 'test_id':1, 'chunk_len':5, 'ntrain_out':None},
+def makeTrainer(*,data_config={'datasource':'/home/data.pickle', 'ntest':2, 'chunk_len':5, 'ntrain_out':None},
                           seed=2022, num_epochs=100,
                           bs=16,lr=1e-3,device='cuda',
                           transformer_config={
