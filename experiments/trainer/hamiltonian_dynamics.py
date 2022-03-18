@@ -773,7 +773,7 @@ class GeneralTrialHNN(object):
             for testname in testname_all:
                 trajectories = []
                 for mb in trainer.dataloaders[testname]:
-                    trajectories.append(pred_and_gt(trainer.dataloaders[testname].dataset,trainer.model,mb))
+                    trajectories.append(pred_and_gt_general(trainer.model,mb))
                 torch.save(np.concatenate(trajectories), savefilename_prefix+"_traj_"+testname+".t")
                 
         except Exception as e:
