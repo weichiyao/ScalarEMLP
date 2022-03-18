@@ -582,7 +582,7 @@ class ScalarTransformer(object):
         self.spacing = jnp.array(np.spacing(1)) 
         
         self._GETPARAMS = {
-            'none': lambda x: pass,
+            'none': lambda x: None,
             'qt': self._get_qt_params,
             'rbf': self._get_rbf_params, 
             'std': self._std_transform
@@ -876,7 +876,7 @@ class ScalarTransformerDP(ScalarTransformer):
         self.spacing = jnp.array(np.spacing(1)) 
         
         self._GETPARAMS = {
-            'none': lambda x: pass,
+            'none': lambda x: None,
             'qt': self._get_qt_params,
             'rbf': self._get_rbf_params, 
             'std': self._std_transform
