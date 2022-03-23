@@ -23,10 +23,7 @@ from scipy.special import binom
 from jax import jit,vmap
 from functools import lru_cache as cache
 from functools import partial
-import itertools 
-from smithnormalform import snfproblem
-from smithnormalform import matrix as snfmatrix
-from smithnormalform import z as snfz
+import itertools  
 
 from typing import Callable, List
 
