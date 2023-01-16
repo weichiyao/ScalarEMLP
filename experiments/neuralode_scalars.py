@@ -21,7 +21,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
                 data_config={'chunk_len':5,'dt':0.2,'integration_time':30,'regen':False},
                 net_config={'n_layers':3,'n_hidden':100},log_level='warn',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},}, 
-                save=True,):
+                save=True,trial=1):
 
     logging.getLogger().setLevel(levels[log_level])
     # Prep the datasets splits, model, and dataloaders
@@ -51,5 +51,5 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
 
 if __name__ == "__main__":
     Trial = odeScalars_trial(makeTrainerScalars)
-    cfg,outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__,namespace=(emlp.groups,emlp.nn)))
+    cfg,outcome = Trial(argupdated_config(makeTrainerScalars.__kwdefaults__))
     print(outcome)
