@@ -482,9 +482,9 @@ class odeScalars_trial(object):
             cfg.pop('local_rank',None) #TODO: properly handle distributed
             resume = cfg.pop('resume',False)
             save = cfg.pop('save',False)
-            if i is not None:
-                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
+            i = cfg['trial']
+            orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
+            cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
             trainer = self.make_trainer(**cfg)
             trainer.logger.add_scalars('config',flatten_dict(cfg))
             trainer.train(cfg['num_epochs'])
@@ -508,14 +508,14 @@ class hnnScalars_trial(object):
     def __init__(self,make_trainer,strict=True):
         self.make_trainer = make_trainer
         self.strict=strict
-    def __call__(self,cfg,i=None):
+    def __call__(self,cfg):
         try:
             cfg.pop('local_rank',None) #TODO: properly handle distributed
             resume = cfg.pop('resume',False)
             save = cfg.pop('save',False)
-            if i is not None:
-                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
+            i = cfg['trial']
+            orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
+            cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
             trainer = self.make_trainer(**cfg)
             trainer.logger.add_scalars('config',flatten_dict(cfg))
             trainer.train(cfg['num_epochs'])
