@@ -477,7 +477,7 @@ class odeScalars_trial(object):
     def __init__(self,make_trainer,strict=True):
         self.make_trainer = make_trainer
         self.strict=strict
-    def __call__(self,cfg,i=None):
+    def __call__(self,cfg):
         try:
             cfg.pop('local_rank',None) #TODO: properly handle distributed
             resume = cfg.pop('resume',False)
