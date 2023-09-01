@@ -156,6 +156,8 @@ class InvarianceNet(pl.LightningModule):
         # compute the loss
         test_MSE = F.mse_loss(Yhat, Y)
         test_R2 = comp_R2(Y,Yhat)
+
+        self.test_step_outputs.append([test_MSE, test_R2])
         return  {'MSE':  test_MSE, 'R2': test_R2}
 
     def on_test_epoch_end(self):
@@ -241,7 +243,7 @@ class EquivarianceNet(pl.LightningModule):
         
         # logging using tensorboard logger
         self.logger.experiment.add_scalars("Train epoch", 
-                                           {'loss'   :  avg_MSE},  
+                                           {'loss'   :  avg_MSE}, 
                                            self.current_epoch) 
 
         self.training_step_outputs.clear()  # free memory
@@ -393,6 +395,5 @@ def train_pl_model(
         train_dataloaders=train_loader,
         val_dataloaders=validation_loader
     )
-    test_metrics = trainer.test(test_dataloaders=test_loader)[0]
-            
+    test_metrics = trainer.test(dataloaders=test_loader)[0]
     return test_metrics
