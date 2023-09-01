@@ -36,6 +36,7 @@ def comp_R2(y,yhat):
     den = y-ybar
     nom = yhat-ybar 
     return torch.sum(nom*nom)/torch.sum(den*den)
+
 class InvarianceNet(pl.LightningModule):
     def __init__(
         self, 
@@ -59,7 +60,11 @@ class InvarianceNet(pl.LightningModule):
         self.learning_rate = learning_rate
         self.milestones=milestones
         self.gamma=gamma
-
+        
+        self.training_step_outputs = []
+        self.validation_step_outputs = []
+        self.test_step_outputs = []
+      
     def forward(self, x):
         
         yhat = self.model(x) # [_, n_out]
@@ -82,23 +87,24 @@ class InvarianceNet(pl.LightningModule):
         # compute the train loss    
         train_MSE = F.mse_loss(Yhat, Y)
         # train_R2 = comp_R2(Y,Yhat)
-
+        
+        self.training_step_outputs.append(train_MSE)
         # Logging to TensorBoard by default
         self.log('loss', train_MSE) 
-        return {'loss':  train_MSE} 
-
-    def training_epoch_end(self, train_outputs):
-        # calculating average loss 
-        avg_MSE    = torch.stack([x['loss'] for x in train_outputs]).mean() 
+        return {'loss':  train_MSE}         
+    
+    def on_train_epoch_end(self): 
+        avg_MSE = torch.stack(self.training_step_outputs).mean() 
         # logging histograms
         self.custom_weights_histogram_adder()
         
         # logging using tensorboard logger
         self.logger.experiment.add_scalars("Train epoch", 
-                                           {'loss'   :  avg_MSE},
+                                           {'loss'   :  avg_MSE}, 
                                            self.current_epoch) 
-        
-        
+
+        self.training_step_outputs.clear()  # free memory
+                
     def configure_optimizers(self):
         """
         # Note that for ReduceLROnPlateau, step should be called after validate():
@@ -123,20 +129,23 @@ class InvarianceNet(pl.LightningModule):
         # compute the loss
         val_MSE = F.mse_loss(Yhat, Y)
         val_R2 = comp_R2(Y,Yhat)
+
+        self.validation_step_outputs.append([val_MSE, val_R2])
         # Logging to TensorBoard by default
         self.log('val_MSE', val_MSE, prog_bar=True)
         self.log('val_R2',   val_R2,   prog_bar=True)
         return {'MSE':  val_MSE, 'R2': val_R2}
-
-    def validation_epoch_end(self, val_outputs):
+    
+    def on_validation_epoch_end(self):
         # calculating average loss 
-        avg_MSE = torch.stack([x['MSE'] for x in val_outputs]).mean()
-        avg_R2 = torch.stack([x['R2'] for x in val_outputs]).mean()
+        avg_MSE = torch.stack([x[0] for x in self.validation_step_outputs]).mean()
+        avg_R2  = torch.stack([x[1] for x in self.validation_step_outputs]).mean()
         # logging using tensorboard logger
         self.logger.experiment.add_scalars("Validation epoch", 
                                            {'MSE'   :  avg_MSE,
                                             'R2'     : avg_R2}, 
                                            self.current_epoch) 
+        self.validation_step_outputs.clear()  # free memory
 
     
     def test_step(self, batch, batch_idx):
@@ -149,12 +158,13 @@ class InvarianceNet(pl.LightningModule):
         test_R2 = comp_R2(Y,Yhat)
         return  {'MSE':  test_MSE, 'R2': test_R2}
 
-
-    def test_epoch_end(self, test_outputs):
-        avg_MSE = torch.stack([x['MSE'] for x in test_outputs]).mean()
-        avg_R2 = torch.stack([x['R2'] for x in test_outputs]).mean()
+    def on_test_epoch_end(self):
+        avg_MSE = torch.stack([x[0] for x in self.test_step_outputs]).mean()
+        avg_R2  = torch.stack([x[1] for x in self.test_step_outputs]).mean()
         metrics = {'MSE': avg_MSE, 'R2': avg_R2}
         self.log_dict(metrics)
+        self.test_step_outputs.clear()  # free memory
+
 
  
 class EquivarianceNet(pl.LightningModule):
@@ -195,6 +205,10 @@ class EquivarianceNet(pl.LightningModule):
         self.milestones=milestones
         self.gamma=gamma
 
+        self.training_step_outputs = []
+        self.validation_step_outputs = []
+        self.test_step_outputs = []
+
     def forward(self, x):
         
         yhat = self.model(x) # [_, n_out]
@@ -205,7 +219,6 @@ class EquivarianceNet(pl.LightningModule):
         for name,params in self.named_parameters():
             self.logger.experiment.add_histogram(name,params,self.current_epoch)
 
-
     def training_step(self, batch, batch_idx):
         # training_step defined the train loop.
         scalars, X, Y = batch
@@ -215,13 +228,14 @@ class EquivarianceNet(pl.LightningModule):
 
         # compute the train loss    
         train_MSE = F.mse_loss(Yhat, Y) 
-
+         
+        self.training_step_outputs.append(train_MSE)
         # Logging to TensorBoard by default
         self.log('loss', train_MSE) 
         return {'loss':  train_MSE} 
 
-    def training_epoch_end(self, train_outputs):
-        avg_MSE    = torch.stack([x['loss'] for x in train_outputs]).mean() 
+    def on_train_epoch_end(self): 
+        avg_MSE = torch.stack(self.train_step_outputs).mean() 
         # logging histograms
         self.custom_weights_histogram_adder()
         
@@ -230,8 +244,9 @@ class EquivarianceNet(pl.LightningModule):
                                            {'loss'   :  avg_MSE},
                                             # 'R2'    :  avg_R2}, 
                                            self.current_epoch) 
-        
-        
+
+        self.training_step_outputs.clear()  # free memory
+            
     def configure_optimizers(self):
         """
         # Note that for ReduceLROnPlateau, step should be called after validate():
@@ -246,7 +261,6 @@ class EquivarianceNet(pl.LightningModule):
         )
         return {"optimizer": optimizer, "lr_scheduler": scheduler} 
 
-
     def validation_step(self, batch, batch_idx):
         """
         model.eval() and torch.no_grad() are called automatically for validation
@@ -257,22 +271,25 @@ class EquivarianceNet(pl.LightningModule):
         # compute the loss
         val_MSE = F.mse_loss(Yhat, Y)
         val_R2 = comp_R2(Y,Yhat)
+        
         # Logging to TensorBoard by default
         self.log('val_MSE', val_MSE, prog_bar=True)
         self.log('val_R2',   val_R2,   prog_bar=True)
-        return {'MSE':  val_MSE, 'R2': val_R2}
+         
+        self.validation_step_outputs.append([val_MSE, val_R2])
+        return {'MSE': val_MSE, 'R2': val_R2}
 
-    def validation_epoch_end(self, val_outputs):
+    def on_validation_epoch_end(self):
         # calculating average loss 
-        avg_MSE = torch.stack([x['MSE'] for x in val_outputs]).mean()
-        avg_R2 = torch.stack([x['R2'] for x in val_outputs]).mean()
+        avg_MSE = torch.stack([x[0] for x in self.validation_step_outputs]).mean()
+        avg_R2  = torch.stack([x[1] for x in self.validation_step_outputs]).mean()
         # logging using tensorboard logger
         self.logger.experiment.add_scalars("Validation epoch", 
                                            {'MSE'   :  avg_MSE,
                                             'R2'     : avg_R2}, 
                                            self.current_epoch) 
+        self.validation_step_outputs.clear()  # free memory
 
-    
     def test_step(self, batch, batch_idx):
         scalars, X, Y = batch
         # Train the model
@@ -280,14 +297,17 @@ class EquivarianceNet(pl.LightningModule):
         # compute the loss
         test_MSE = F.mse_loss(Yhat, Y)
         test_R2 = comp_R2(Y,Yhat)
+
+        self.test_step_outputs.append([test_MSE, test_R2])
         return  {'MSE':  test_MSE, 'R2': test_R2}
 
-
-    def test_epoch_end(self, test_outputs):
-        avg_MSE = torch.stack([x['MSE'] for x in test_outputs]).mean()
-        avg_R2 = torch.stack([x['R2'] for x in test_outputs]).mean()
+    def on_test_epoch_end(self):
+        avg_MSE = torch.stack([x[0] for x in self.test_step_outputs]).mean()
+        avg_R2  = torch.stack([x[1] for x in self.test_step_outputs]).mean()
         metrics = {'MSE': avg_MSE, 'R2': avg_R2}
         self.log_dict(metrics)
+        self.test_step_outputs.clear()  # free memory
+
         
 def train_pl_model(
     n_in_net, 
@@ -357,12 +377,12 @@ def train_pl_model(
         save_top_k=3,
         mode='min',
     )
+ 
     kwargs = {
         'max_epochs': max_epochs, 
         'min_epochs': min_epochs,
-        'gpus': num_gpus, 
-        'weights_summary': None,
-        'progress_bar_refresh_rate': progress_bar_refresh_rate,
+        'accelerator':'gpu', 
+        'devices': num_gpus,
         'check_val_every_n_epoch': check_val_every_n_epoch,
         'default_root_dir': path_logs
     }
@@ -371,7 +391,7 @@ def train_pl_model(
     
     trainer.fit(
         model=litmodel, 
-        train_dataloader=train_loader,
+        train_dataloaders=train_loader,
         val_dataloaders=validation_loader
     )
     test_metrics = trainer.test(test_dataloaders=test_loader)[0]
