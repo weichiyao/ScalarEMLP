@@ -235,14 +235,13 @@ class EquivarianceNet(pl.LightningModule):
         return {'loss':  train_MSE} 
 
     def on_train_epoch_end(self): 
-        avg_MSE = torch.stack(self.train_step_outputs).mean() 
+        avg_MSE = torch.stack(self.training_step_outputs).mean() 
         # logging histograms
         self.custom_weights_histogram_adder()
         
         # logging using tensorboard logger
         self.logger.experiment.add_scalars("Train epoch", 
-                                           {'loss'   :  avg_MSE},
-                                            # 'R2'    :  avg_R2}, 
+                                           {'loss'   :  avg_MSE},  
                                            self.current_epoch) 
 
         self.training_step_outputs.clear()  # free memory
