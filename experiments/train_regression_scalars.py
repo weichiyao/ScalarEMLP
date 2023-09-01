@@ -162,11 +162,11 @@ def restoreResults(
     trainer = pl.Trainer()
     train_metrics=trainer.test(
         model_load, 
-        test_dataloaders=dataloaders['train']
+        dataloaders=dataloaders['train']
     )[0]
     test_metrics=trainer.test(
         model_load, 
-        test_dataloaders=dataloaders['test']
+        dataloaders=dataloaders['test']
     )[0]
     return {'train_MSE':train_metrics['MSE'], 
             'train_R2':train_metrics['R2'], 
