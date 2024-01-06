@@ -62,7 +62,7 @@ def BOdeFlow(dynamics,z0,T,tol=1e-4):
     """ Batched integration of ODE dynamics into rollout trajectories.
         Given dynamics (state_dim->state_dim) and z0 of shape (bs,state_dim)
         and T of shape (t,) outputs trajectories (bs,t,state_dim) """
-    dynamics = jit(vmap(jit(dynamics),(0,None)))
+    dynamics = vmap(dynamics,(0,None))
     return odeint(dynamics, z0, T, rtol=tol).transpose((1,0,2))
 
 class HamiltonianDataset(Dataset):
