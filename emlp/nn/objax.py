@@ -475,8 +475,7 @@ class EquivarianceLayer_objax(Module):
         self.gamma    = jnp.array(gamma)
         self.n_in_mlp = len(mu)*30
         self.mlp      = BasicMLP_objax(n_in=self.n_in_mlp, n_out=24, n_hidden=n_hidden, n_layers=n_layers) 
-        self.g        = jnp.array([0,0,-1])
-        self.network  = self.H   
+        self.g        = jnp.array([0,0,-1]) 
     
     def H(self, x):
         x = x.reshape(-1,4,3)                                                             # (n,4,3)
@@ -494,5 +493,5 @@ class EquivarianceLayer_objax(Module):
         return ret.reshape(-1, 12) #(n,12)
         
     def __call__(self, x, t): 
-        return self.network(x)
+        return self.H(x)
  
