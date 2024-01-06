@@ -30,8 +30,7 @@ def makeTrainerScalars(*,dataset=DoubleSpringPendulum,num_epochs=2000,ndata=5000
         datasets = split_dataset(base_ds,splits=split)
     
     z0_train = base_ds.Zs[datasets['train']._ids,0,:]
-    zps_train = base_ds.Zs[datasets['train']._ids]
-    scalars_z0 = compute_scalars(z0_train.reshape(-1,4,3), zps_train)
+    scalars_z0 = compute_scalars(z0_train.reshape(-1,4,3))
     trans_mu, trans_gamma = radial_basis_transform(scalars_z0, nrad = n_rad) 
     model = EquivarianceLayer_objax(
         n_layers=net_config['n_layers'], 
