@@ -491,11 +491,6 @@ class EquivarianceLayer_objax(Module):
         output = jnp.sum(out[:,:16].reshape(-1,4,4,1) * jnp.expand_dims(x, 1), axis=1)  # (n,4,3)
         output = output + out[:,16:20] * jnp.expand_dims(y,1)                           # (n,4,3)
         output = output + out[:,20:] * self.g                                           # (n,4,3)
-    
-        # x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,16,:] * y + out[:,20,:] * g #(n,3)
-        # x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * g #(n,3)
-        # p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * g #(n,3)
-        # p2 = jnp.sum(out[:,12:16,:]*x, axis = 1) + out[:,19,:] * y + out[:,23,:] * g #(n,3)
-        # jnp.concatenate([x1,x2,p1,p2], axis=-1)
+        
         return output.reshape(-1, 12) #(n,12)
  
