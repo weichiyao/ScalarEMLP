@@ -483,13 +483,13 @@ class EquivarianceLayer_objax(Module):
         x = x.reshape(-1,4,3) # (n,4,3)
         scalars = compute_scalars_jax(x, self.g) # (n,30)
         scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,30,n_rad)
-        scalars = jnp.exp(-self.gamma*(scalars**2)) #(n,30,n_rad)
-        scalars = scalars.reshape(-1, self.n_in_mlp) #(n,26*n_rad)
+        scalars = jnp.exp(-self.gamma*(scalars**2))       # (n,30,n_rad)
+        scalars = scalars.reshape(-1, self.n_in_mlp)      # (n,30*n_rad)
         out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
          
         y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3) 
-        output = jnp.sum(out[:,:16].reshape(-1,4,4,1) * jnp.expand_dims(x, 1), axis=1) # (n,4,3)
-        output = output + out[:,16:20] * jnp.expand_dims(y,1)                          # (n,4,3)
+        output = jnp.sum(out[:,:16].reshape(-1,4,4,1) * jnp.expand_dims(x, 1), axis=1)  # (n,4,3)
+        output = output + out[:,16:20] * jnp.expand_dims(y,1)                           # (n,4,3)
         output = output + out[:,20:] * jnp.expand_dims(self.g,1)                        # (n,4,3)
     
         # x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,16,:] * y + out[:,20,:] * g #(n,3)
