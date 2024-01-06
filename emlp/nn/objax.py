@@ -476,8 +476,8 @@ class EquivarianceLayer_objax(Module):
         self.n_in_mlp = len(mu)*30
         self.mlp      = BasicMLP_objax(n_in=self.n_in_mlp, n_out=24, n_hidden=n_hidden, n_layers=n_layers) 
         self.g        = jnp.array([0,0,-1])
-
-    def __call__(self, x, t): 
+        
+    def H(self, x):
         x = x.reshape(-1,4,3) # (n,4,3)
         scalars = compute_scalars_jax(x, self.g) # (n,30)
         scalars = jnp.expand_dims(scalars, axis=-1) - jnp.expand_dims(self.mu, axis=0) #(n,30,n_rad)
@@ -486,9 +486,13 @@ class EquivarianceLayer_objax(Module):
         out = jnp.expand_dims(self.mlp(scalars), axis=-1) # (n,24,1)
          
         y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3) 
-        output = jnp.sum(out[:,:16].reshape(-1,4,4,1) * jnp.expand_dims(x, 1), axis=1)  # (n,4,3)
-        output = output + out[:,16:20] * jnp.expand_dims(y,1)                           # (n,4,3)
-        output = output + out[:,20:] * self.g                                           # (n,4,3)
+        output_x = jnp.sum(out[:,:16].reshape(-1,4,4,1) * jnp.expand_dims(x, 1), axis=1)  # (n,4,3)
+        output_y = out[:,16:20] * jnp.expand_dims(y,1)                           # (n,4,3)
+        output_g = out[:,20:] * self.g
         
-        return output.reshape(-1, 12) #(n,12)
+        ret = output_x+output_y+output_g
+        return ret.reshape(-1, 12) #(n,12)
+        
+    def __call__(self, x, t): 
+        return self.H(x)
  
