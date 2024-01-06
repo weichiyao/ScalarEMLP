@@ -487,10 +487,10 @@ class EquivarianceLayer_objax(Module):
         
          
         y = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
-        x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * self.g #(n,3)
-        x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * self.g #(n,3)
-        p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,19,:] * y + out[:,23,:] * self.g #(n,3)
-        p2 = jnp.sum(out[:,12:16,:]*x, axis = 1) + out[:,20,:] * y + out[:,24,:] * self.g #(n,3)
+        x1 = jnp.sum(out[:,0:4,:]  *x, axis = 1) + out[:,16,:] * y + out[:,20,:] * self.g #(n,3)
+        x2 = jnp.sum(out[:,4:8,:]  *x, axis = 1) + out[:,17,:] * y + out[:,21,:] * self.g #(n,3)
+        p1 = jnp.sum(out[:,8:12,:] *x, axis = 1) + out[:,18,:] * y + out[:,22,:] * self.g #(n,3)
+        p2 = jnp.sum(out[:,12:16,:]*x, axis = 1) + out[:,19,:] * y + out[:,23,:] * self.g #(n,3)
         
         
         return jnp.concatenate([x1,x2,p1,p2], axis=-1) #(n,12)
