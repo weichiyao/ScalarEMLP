@@ -471,13 +471,11 @@ class EquivarianceLayer_objax(Module):
         gamma
     ):
         super().__init__()  
-        self.mu = mu # (n_rad,)
-        self.gamma = gamma
+        self.mu       = jnp.array(mu) # (n_rad,)
+        self.gamma    = jnp.array(gamma)
         self.n_in_mlp = len(mu)*30
-        self.mlp = BasicMLP_objax(
-          n_in=self.n_in_mlp, n_out=24, n_hidden=n_hidden, n_layers=n_layers
-        ) 
-        self.g = jnp.array([0,0,-1])
+        self.mlp      = BasicMLP_objax(n_in=self.n_in_mlp, n_out=24, n_hidden=n_hidden, n_layers=n_layers) 
+        self.g        = jnp.array([0,0,-1])
 
     def __call__(self, x, t): 
         x = x.reshape(-1,4,3) # (n,4,3)
