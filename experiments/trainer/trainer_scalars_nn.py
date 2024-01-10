@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader 
 import torch.utils.data as data
 from scalars_nn import BasicMLP, EquivariancePermutationLayer, EquivarianceLayer
-from pytorch_lightning.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint
 #################################################################################
 class RandomFixedLengthSampler(data.Sampler):
     """
