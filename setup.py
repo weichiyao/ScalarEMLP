@@ -20,7 +20,7 @@ setup(name=project_name,
       packages=find_packages(),
       long_description=open('README.md').read(),
       long_description_content_type='text/markdown',
-      url='https://github.com/mfinzi/equivariant-MLP',
+      url='https://github.com/weichiyao/ScalarEMLP',
       classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
