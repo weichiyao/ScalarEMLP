@@ -1,4 +1,4 @@
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 import torch.optim as optim 
 import torch.nn as nn
