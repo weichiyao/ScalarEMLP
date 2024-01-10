@@ -1,4 +1,4 @@
-from emlp.nn import EquivarianceLayer_objax,compute_scalars,radial_basis_transform
+from scalaremlp.nn import EquivarianceLayer_objax,compute_scalars,radial_basis_transform
 from trainer.hamiltonian_dynamics import IntegratedODETrainer,DoubleSpringPendulum,odeScalars_trial
 from torch.utils.data import DataLoader
 from oil.utils.utils import FixedNumpySeed,FixedPytorchSeed
@@ -6,8 +6,6 @@ from trainer.utils import LoaderTo
 from oil.datasetup.datasets import split_dataset
 from oil.tuning.args import argupdated_config
 import logging
-import emlp.nn
-import emlp.groups
 import objax
  
 

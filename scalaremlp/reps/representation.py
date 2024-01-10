@@ -13,7 +13,7 @@ from functools import reduce
 from oil.utils.utils import export
 
 from plum import dispatch
-import emlp.reps
+import scalaremlp.reps
 #TODO: add rep,v = flatten({'Scalar':..., 'Vector':...,}), to_dict(rep,vector) returns {'Scalar':..., 'Vector':...,}
 #TODO and simpler rep = flatten({Scalar:2,Vector:10,...}),
 # Do we even want + operator to implement non canonical orderings?
@@ -133,10 +133,10 @@ class Rep(object):
         if isinstance(other,int):
             if other==0: return self
             else: return self+other*Scalar
-        elif emlp.reps.product_sum_reps.both_concrete(self,other):
-            return emlp.reps.product_sum_reps.SumRep(self,other)
+        elif scalaremlp.reps.product_sum_reps.both_concrete(self,other):
+            return scalaremlp.reps.product_sum_reps.SumRep(self,other)
         else:
-            return emlp.reps.product_sum_reps.DeferredSumRep(self,other)
+            return scalaremlp.reps.product_sum_reps.DeferredSumRep(self,other)
 
     def __radd__(self,other):
         if isinstance(other,int): 
@@ -188,9 +188,9 @@ def mul_reps(ra,rb:int):
     if rb==1: return ra
     if rb==0: return 0
     if (not hasattr(ra,'concrete')) or ra.concrete:
-        return emlp.reps.product_sum_reps.SumRep(*(rb*[ra]))
+        return scalaremlp.reps.product_sum_reps.SumRep(*(rb*[ra]))
     else:
-        return emlp.reps.product_sum_reps.DeferredSumRep(*(rb*[ra]))
+        return scalaremlp.reps.product_sum_reps.DeferredSumRep(*(rb*[ra]))
 
 @dispatch
 def mul_reps(ra:int,rb):
@@ -495,4 +495,4 @@ def equivariance_error(W,repin,repout,G):
     equiv_err = scale_adjusted_rel_error(W@ring,routg@W,gs)
     return equiv_err
 
-import emlp.groups # Why is this necessary to avoid circular import?
+import scalaremlp.groups # Why is this necessary to avoid circular import?

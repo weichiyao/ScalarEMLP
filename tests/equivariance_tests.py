@@ -1,10 +1,10 @@
 
 import numpy as np#
 import copy
-from emlp.reps import *
-from emlp.groups import *
-from emlp.nn import uniform_rep
-import pytest#import unittest
+from scalaremlp.reps import *
+from scalaremlp.groups import *
+from scalaremlp.nn import uniform_rep
+import pytest #import unittest
 from jax import vmap
 import jax.numpy as jnp
 import logging
