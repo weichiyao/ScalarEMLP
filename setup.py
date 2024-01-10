@@ -7,20 +7,23 @@ def get_property(prop, project):
     result = re.search(r'{}\s*=\s*[\'"]([^\'"]*)[\'"]'.format(prop), open(project + '/__init__.py').read())
     return result.group(1)
 
-project_name = "emlp"
+project_name = "scalaremlp"
 setup(name=project_name,
-      description="A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups",
+      description="Scalar-Based Equivariant Machine Learning Methods",
       version= get_property('__version__',project_name),
-      author='Marc Finzi',
-      author_email='maf820@nyu.edu',
+      author='Weichi Yao, Marc Finzi',
+      author_email='weichiy@umich.edu, maf820@nyu.edu',
       license='MIT',
-      python_requires='>=3.6',
+      python_requires='>=3.8',
       install_requires=['h5py','objax','pytest','plum-dispatch',
-            'olive-oil-ml','optax','tqdm>=4.38'],
+            'optax','tqdm>=4.38','pytorch-lightning','lightning'],
+      extras_require = {
+          'EXPTS':['olive-oil-ml>=0.1.1']
+      },
       packages=find_packages(),
       long_description=open('README.md').read(),
       long_description_content_type='text/markdown',
-      url='https://github.com/mfinzi/equivariant-MLP',
+      url='https://github.com/weichiyao/ScalarEMLP',
       classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
@@ -31,7 +34,7 @@ setup(name=project_name,
       keywords=[
             'equivariance','MLP','symmetry','group','AI','neural network',
             'representation','group theory','deep learning','machine learning',
-            'rotation','Lorentz invariance',
+            'rotation','Lorentz invariance','scalar-based'
       ],
 
 )
