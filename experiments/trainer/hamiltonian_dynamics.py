@@ -14,8 +14,7 @@ from functools import partial
 
 from scalaremlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
 from scalaremlp.reps import T,Scalar
-from .classifier import Regressor,Classifier
-#from emlp_jax.model_trainer import RegressorPlus
+from .classifier import Regressor,Classifier 
 
 ## Code to rollout a Hamiltonian system
 
