@@ -1,4 +1,4 @@
-from emlp.nn import ScalarMLP, InvarianceLayer_objax, ScalarTransformer
+from scalaremlp.nn import ScalarMLP, InvarianceLayer_objax, ScalarTransformer
 from trainer.hamiltonian_dynamics import IntegratedDynamicsTrainer,DoubleSpringPendulum,hnnScalars_trial
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr,FixedNumpySeed,FixedPytorchSeed
@@ -6,8 +6,8 @@ from trainer.utils import LoaderTo
 from oil.datasetup.datasets import split_dataset
 from oil.tuning.args import argupdated_config 
 import logging
-import emlp
-import emlp.reps
+import scalaremlp
+import scalaremlp.reps
 import objax
 import numpy as np
 
