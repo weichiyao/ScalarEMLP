@@ -25,7 +25,7 @@ Consider the following three experiments with the same training data.
 The test data used in Experiment 1 is generated from the same distribution as the
 training dataset. The test data used in Experiment 2 consists of applying a transformation
 to the test data in Experiment 1, where each of the input parameters that include a power of
-kg in its units ($m_1$, $m_2$, $k_1$, $k_2$, $\mathbf{p}_1(0)$ and $\mathbf{p}_2(0)$) is scaled by a factor randomly generated
+kg in its units ($\mathbf{p}_1(0)$, $\mathbf{p}_2(0)$, $m_1$, $m_2$, $k_1$, $k_2$) is scaled by a factor randomly generated
 from Unif(3, 7). The test data used in Experiment 3 has the input parameters $m_1$, $m_2$, $k_1$, $k_2$, $L_1$ and $L_2$ generated from 
 Unif(1, 5). We use the same training data $N=30000$ for all
 three experiments and each test set consists of 500 data points. That is, Experiments 2 and
