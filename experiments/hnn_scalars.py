@@ -6,8 +6,6 @@ from trainer.utils import LoaderTo
 from oil.datasetup.datasets import split_dataset
 from oil.tuning.args import argupdated_config 
 import logging
-import scalaremlp
-import scalaremlp.reps
 import objax
 import numpy as np
 
