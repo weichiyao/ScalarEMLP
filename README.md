@@ -1,7 +1,7 @@
 # Scalar-based multi-layer perceptron models
 
 ## Authors:
-*ScalarEMLP* contains the codes to implement the idea of enforcing the equivariance in deep learning using the scalar method based on the NeurIPS paper (to appear) [**Scalars are universal: Equivariant machine learning, structured like classical physics**](https://arxiv.org/abs/2106.06610); in particular, for learning the system dynamics, for example, given a double pendulum with springs, from NeurIPS 2021 workshop paper on Machine Learning and the Physical Sciences (to appear) [**A simple equivariant machine learning method for dynamics based on scalars**](https://arxiv.org/abs/2110.03761).
+*ScalarEMLP* contains the codes to implement the idea of enforcing the equivariance in deep learning using the scalar method based on the NeurIPS paper [**Scalars are universal: Equivariant machine learning, structured like classical physics**](https://arxiv.org/abs/2106.06610); in particular, for learning the system dynamics, for example, given a double pendulum with springs, from NeurIPS 2021 workshop paper on Machine Learning and the Physical Sciences (to appear) [**A simple equivariant machine learning method for dynamics based on scalars**](https://arxiv.org/abs/2110.03761).
 
 Some contributor names appear to the right to this github page because we imported their codes from their public github repository [equivariant-MLP](https://github.com/mfinzi/equivariant-MLP.git). 
 
@@ -31,7 +31,7 @@ The neural networks used for this example are multi-layer perceptrons based on t
 
 For example, given 3000 training datasets, you can run the following codes with `ntrain=3000`, which produce the test MSE results from  the neural networks based on the scalars `<xi,xj>, i,j=1,2`.
 ```python
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from train_regression_scalars import makeTrainerScalars
 
 ntrain=3000
