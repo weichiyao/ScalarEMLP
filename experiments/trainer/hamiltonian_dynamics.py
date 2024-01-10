@@ -63,13 +63,6 @@ def BHamiltonianFlow(H,z0,T,zp,tol=1e-7):
     dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None,0)))
     return odeint(dynamics, z0, T, zp, rtol=tol).transpose((1,0,2))
 
-def BOdeFlow(dynamics,z0,T,zp,tol=1e-7):
-    """ Batched integration of ODE dynamics into rollout trajectories.
-        Given dynamics (state_dim->state_dim) and z0 of shape (bs,state_dim)
-        and T of shape (t,) outputs trajectories (bs,t,state_dim) """
-    dynamics = jit(vmap(jit(dynamics),(0,None,0)))
-    return odeint(dynamics, z0, T, zp, rtol=tol).transpose((1,0,2))
-
 class HamiltonianDataset(Dataset):
     """ A dataset that generates trajectory chunks from integrating the Hamiltonian dynamics
         from a given Hamiltonian system and initial condition distribution.
@@ -211,18 +204,6 @@ class HamiltonianDataset(Dataset):
         xt = xt.reshape((xt.shape[0],-1,3))
         anim = self.animator(xt)
         return anim.animate()
-
-class SHO(HamiltonianDataset):
-    """ A basic simple harmonic oscillator"""
-    def H(self,z,c):
-        ke = (z[...,1]**2).sum()/2
-        pe = (z[...,0]**2).sum()/2
-        return ke+pe 
-    def sample_initial_conditions(self,bs, changedist=False, rescaleKG=False, scale=None):
-        return np.random.randn(bs,2)
-    def sample_parameters(self, bs, changedist=False, rescaleKG=False, scale=None):
-        return  
-    
     
 class DoubleSpringPendulum(HamiltonianDataset):
     """ The double spring pendulum dataset described in the paper."""
@@ -297,9 +278,6 @@ class DoubleSpringPendulum(HamiltonianDataset):
     def animator(self):
         return CoupledPendulumAnimation
 
-
-
-
 class IntegratedDynamicsTrainer(Regressor):
     """ A trainer for training the Hamiltonian Neural Networks. Feel free to use your own instead."""
     def __init__(self,model,*args,**kwargs):
@@ -331,33 +309,7 @@ class IntegratedDynamicsTrainer(Regressor):
             metrics = {printname_all[i]: metrics} 
             self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)
-
-class IntegratedODETrainer(Regressor):
-    """ A trainer for training the Neural ODEs. Feel free to use your own instead."""
-    def __init__(self,model,*args,**kwargs):
-        super().__init__(model,*args,**kwargs)
-        self.loss = objax.Jit(self.loss, model.vars())
-        #self.model = objax.Jit(self.model)
-        self.gradvals = objax.Jit(objax.GradValues(self.loss, model.vars()))#objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
-        #self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
-
-    def loss(self, minibatch):
-        """ Standard cross-entropy loss """
-        (z0, zps, ts), true_zs = minibatch
-        # pred_zs = BOdeFlow(self.model,z0,ts[0])
-        pred_zs = BOdeFlow(self.model,z0,ts[0],zps)
-        return jnp.mean((pred_zs - true_zs)**2)
-
-    def metrics(self, loader):
-        mse = lambda mb: np.asarray(self.loss(mb))
-        return {"MSE": self.evalAverageMetrics(loader, mse)}
-        
-    def logStuff(self, step, minibatch=None):
-        loader = self.dataloaders['test']
-        metrics = {'test_Rollout': np.exp(self.evalAverageMetrics(loader,partial(log_rollout_error_ode,loader.dataset,self.model)))} 
-        self.logger.add_scalars('metrics', metrics, step)
-        super().logStuff(step,minibatch)
-
+     
 def rel_err(a,b):
     """ Relative error |a-b|/|a+b|"""
     return jnp.sqrt(((a-b)**2).mean())/(jnp.sqrt((a**2).mean())+jnp.sqrt((b**2).mean()))#
@@ -383,36 +335,6 @@ def pred_and_gt(ds,model,minibatch):
     # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
     gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
-
-
-def log_rollout_error_ode(ds,model,minibatch):
-    """ Computes the log of the geometric mean of the rollout
-        error computed between the dataset ds and NeuralODE model
-        on the initial condition in the minibatch."""
-    (z0, zps, _), _ = minibatch
-    # pred_zs = BOdeFlow(model,z0,ds.T_long)
-    pred_zs = BOdeFlow(model,z0,ds.T_long,zps)
-    # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps)
-    errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
-    clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
-    log_geo_mean = jnp.log(clamped_errs).mean()
-    return log_geo_mean
-
-def pred_and_gt_ode(ds,model,minibatch):
-    (z0, zps, _), _ = minibatch
-    # pred_zs = BOdeFlow(model,z0,ds.T_long,tol=2e-6)
-    pred_zs = BOdeFlow(model,z0,ds.T_long,zps,tol=2e-6)
-    # gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,zps,tol=2e-6)
-    return np.stack([pred_zs,gt_zs],axis=-1)
-
-
-
-
-
-
-
 
 
 
@@ -549,103 +471,6 @@ class CoupledPendulumAnimation(PendulumAnimation):
 
 from collections.abc import Iterable
 
-@export
-class hnn_trial(object):
-    """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
-        Feel free to use your own."""
-    def __init__(self,make_trainer,strict=True):
-        self.make_trainer = make_trainer
-        self.strict=strict
-    def __call__(self,cfg,i=None):
-        try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            if i is not None:
-                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
-            trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
-            trainer.train(cfg['num_epochs'])
-            if save: cfg['saved_at']=trainer.save_checkpoint()
-            outcome = trainer.ckpt['outcome']
-            trajectories = []
-            for mb in trainer.dataloaders['test']:
-                trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"./{cfg['network']}_{cfg['net_config']['group']}_{i}.t")
-        except Exception as e:
-            if self.strict: raise
-            outcome = e
-        del trainer
-        return cfg, outcome
-
-
-@export
-class ode_trial(object):
-    """ A training trial for the Neural ODEs, contains lots of boiler plate which is not necessary.
-        Feel free to use your own."""
-    def __init__(self,make_trainer,strict=True):
-        self.make_trainer = make_trainer
-        self.strict=strict
-    def __call__(self,cfg,i=None):
-        try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            if i is not None:
-                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
-            trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
-            trainer.train(cfg['num_epochs'])
-            if save: cfg['saved_at']=trainer.save_checkpoint()
-            outcome = trainer.ckpt['outcome']
-            trajectories = []
-            for mb in trainer.dataloaders['test']:
-                trajectories.append(pred_and_gt_ode(trainer.dataloaders['test'].dataset,trainer.model,mb))
-            torch.save(np.concatenate(trajectories),f"./{cfg['network']}_{cfg['net_config']['group']}_{i}.t") 
-        except Exception as e:
-            if self.strict: raise
-            outcome = e
-        del trainer
-        return cfg, outcome
-    
-@export
-class odeScalars_trial(object):
-    """ A training trial for the Neural ODEs, contains lots of boiler plate which is not necessary.
-        Feel free to use your own."""
-    def __init__(self,make_trainer,strict=True):
-        self.make_trainer = make_trainer
-        self.strict=strict
-    def __call__(self,cfg):
-        try:
-            cfg.pop('local_rank',None) #TODO: properly handle distributed
-            resume = cfg.pop('resume',False)
-            save = cfg.pop('save',False)
-            i = cfg['trial']
-            orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
-            cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
-            trainer = self.make_trainer(**cfg)
-            trainer.logger.add_scalars('config',flatten_dict(cfg))
-            trainer.train(cfg['num_epochs'])
-            # if save: cfg['saved_at']=trainer.save_checkpoint()
-            savefilename_prefix = f"{cfg['trainer_config']['log_dir']}/{'scalars_NODEs'}_n{cfg['ndata']}_{cfg['transformer_config']['dimensionless']}_{i}"
-            if save:
-                # Pickling
-                pickle.dump(trainer.model, open(savefilename_prefix+"_net.pickle", 'wb'))
-             
-            outcome = trainer.ckpt['outcome']
-            trajectories = []
-            for mb in trainer.dataloaders['test']:
-                trajectories.append(pred_and_gt_ode(trainer.dataloaders['test'].dataset,trainer.model,mb)) 
-            torch.save(np.concatenate(trajectories), savefilename_prefix+"_traj.t")
-        except Exception as e:
-            if self.strict: raise
-            outcome = e
-        del trainer
-        return cfg, outcome
-    
-    
 @export
 class hnnScalars_trial(object):
     """ A training trial for the HNNs, contains lots of boiler plate which is not necessary.
