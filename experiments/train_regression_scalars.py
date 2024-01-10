@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 from oil.datasetup.datasets import split_dataset
 from emlp.datasets import Inertia,O5Synthetic,ParticleInteraction
 import torch
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 
 
 from trainer.trainer_scalars_nn import train_pl_model, RandomFixedLengthSampler
