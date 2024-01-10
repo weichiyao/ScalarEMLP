@@ -26,7 +26,7 @@ The test data used in Experiment 1 is generated from the same distribution as th
 training dataset. The test data used in Experiment 2 consists of applying a transformation
 to the test data in Experiment 1, where each of the input parameters that include a power of
 kg in its units ($m_1$, $m_2$, $k_1$, $k_2$, $p_1(0)$ and $p_2(0)$) is scaled by a factor randomly generated
-from Unif(3, 7). The test data used in Experiment 3 has the input parameters $m_1$, $m_2$, $k_1$, $k_2$, $L_1$ and $L2_$ generated from 
+from Unif(3, 7). The test data used in Experiment 3 has the input parameters $m_1$, $m_2$, $k_1$, $k_2$, $L_1$ and $L_2$ generated from 
 Unif(1, 5). We use the same training data $N=30000$ for all
 three experiments and each test set consists of 500 data points. That is, Experiments 2 and
 3 have out-of-distribution test data, relative to their training data.
