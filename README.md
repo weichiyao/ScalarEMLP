@@ -16,8 +16,8 @@ To compare the simulation results with those using *EMLP* proposed in [A Practic
 ## Experimental Results from Paper
 To run the scripts you will need to clone the repo and install it locally which you can do with
 ```
-!git clone https://github.com/Pamplemousse-Elaina/Comparison_EMLP.git
-cd Comparison_EMLP
+git clone https://github.com/weichiyao/ScalarEMLP.git
+cd ScalarEMLP
 pip install -e .
 ```
 
