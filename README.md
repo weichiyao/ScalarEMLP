@@ -1,7 +1,7 @@
 # Dimensionless scalar-based equivariant machine learning models
 
 ## Authors:
-*Dimensionless-branch ScalarEMLP*  contains the codes to implement the idea of enforcing the equivariance in deep learning (including unit-equivariance) using the scalar method based on the JMLR paper [**Dimensionless machine learning: Imposing exact units equivariance**](https://arxiv.org/pdf/2204.00887.pdf).
+**Dimensionless-branch ScalarEMLP** contains the codes to implement the idea of enforcing the equivariance in deep learning (including unit-equivariance) using the scalar method based on the JMLR paper [**Dimensionless machine learning: Imposing exact units equivariance**](https://arxiv.org/pdf/2204.00887.pdf).
 
 Some contributor names appear to the right to this github page because we imported their codes from their public github repository [equivariant-MLP](https://github.com/mfinzi/equivariant-MLP.git). 
 
