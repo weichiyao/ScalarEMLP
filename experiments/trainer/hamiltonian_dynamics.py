@@ -3,9 +3,7 @@ from jax import grad, jit, vmap, jacfwd, jvp, vjp, random
 from jax.experimental.ode import odeint
 import jax.numpy as jnp
 import objax
-from oil.utils.utils import Named
-from oil.tuning.configGenerator import flatten_dict
-from oil.utils.utils import export
+from scalaremlp.utils import export, flatten_dict
  
 import os
 import torch 

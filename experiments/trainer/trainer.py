@@ -1,20 +1,11 @@
-import dill
 from oil.logging.lazyLogger import LazyLogger
-from oil.utils.utils import Eval, Named
+from oil.utils.utils import Named
 from oil.utils.mytqdm import tqdm
 from oil.tuning.study import guess_metric_sign
-import copy, os, random
-import glob
-import numpy as np
-from natsort import natsorted
-import jax
-from jax import lax
+import copy
 from jax import numpy as jnp
 from jax.example_libraries import optimizers as jeoptim
-from jax.tree_util import tree_map
 
-import logging
-from functools import partial
 import objax 
 
 class Trainer(object,metaclass=Named):

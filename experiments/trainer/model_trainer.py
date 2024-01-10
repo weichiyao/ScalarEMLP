@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from oil.utils.utils import export
+from scalaremlp.utils import export
 import jax
 from jax import vmap
 import jax.numpy as jnp
