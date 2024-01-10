@@ -19,7 +19,17 @@ pip install -e .
 ```
 
 ### Modeling dynamical systems with symmetries
-We consider the task of learning the dynamics of a double pendulum with springs in 3-dimensional space, analogous to the numerical experiment from [Finzi et al. ICML 2021](https://arxiv.org/abs/2104.09459). The approach consists of learning the Hamiltonian that characterizes the dynamical system. Finzi at al. consider O(2) or SO(2) equivariance, because the behavior in the z-direction is not the same as the behavior in the xy-plane due to gravity. Our model considers the gravity vector to be an input of the hamiltonian and models the Hamiltonian as an O(3)-invariant function: ![formula](https://render.githubusercontent.com/render/math?math=H(q_1,q_2,p_1,p_2,g,k_1,k_2,L_1,L2,m_1,m_2)) an invariant function of vectors indicating the positions of the masses, the momentums, the gravity vector, and the scalars corresponding to the constant of the springs, the natural lengths, and the masses.
+We consider the task of learning the dynamics of a double pendulum with springs in 3-dimensional space, analogous to the numerical experiment from [Finzi et al. ICML 2021](https://arxiv.org/abs/2104.09459). The approach consists of learning the Hamiltonian that characterizes the dynamical system. Finzi at al. consider O(2) or SO(2) equivariance, because the behavior in the z-direction is not the same as the behavior in the xy-plane due to gravity. Our model considers the gravity vector to be an input of the hamiltonian and models the Hamiltonian as an O(3)-invariant function: ![formula](https://render.githubusercontent.com/render/math?math=H(q_1,q_2,p_1,p_2,g,k_1,k_2,L_1,L_2,m_1,m_2)) an invariant function of vectors indicating the positions of the masses, the momentums, the gravity vector, and the scalars corresponding to the constant of the springs, the natural lengths, and the masses.
+
+Consider the following three experiments with the same training data. 
+The test data used in Experiment 1 is generated from the same distribution as the
+training dataset. The test data used in Experiment 2 consists of applying a transformation
+to the test data in Experiment 1, where each of the input parameters that include a power of
+kg in its units ($m_1$, $m_2$, $k_1$, $k_2$, $p_1(0)$ and $p_2(0)$) is scaled by a factor randomly generated
+from Unif(3, 7). The test data used in Experiment 3 has the input parameters $m_1$, $m_2$, $k_1$, $k_2$, $L_1$ and $L2_$ generated from 
+Unif(1, 5). We use the same training data $N=30000$ for all
+three experiments and each test set consists of 500 data points. That is, Experiments 2 and
+3 have out-of-distribution test data, relative to their training data.
      
 For the dynamical systems modeling experiments you can use the scripts [`experiments/hnn_scalars.py`](experiments/hnn_scalars.py) 
 ```
@@ -28,7 +38,15 @@ python experiments/hnn_scalars.py
 to train dimensionless Scalar-Based EMLP Hamiltonian Neural Networks.  
 
 #### Figures to visualize scalar-based results for the springy dynamic system
-<img src=https://github.com/weichiyao/ScalarEMLP/blob/9bad3323e50b652f07ce314150f3f4f423ebefe8/docs/notebooks/imgs/phase_springy_dynamic_system.png height="400" width="600"/>
-
-The above figure shows the ground truth and predictions of mass 1 (top) and 2 (bottom) in the phase space w.r.t. each dimension. HNNs exhibits more accurate predictions for longer time scales.
+<img src=https://github.com/weichiyao/ScalarEMLP/blob/f093e00c709a8d083a80ae3326d982e47f6677c1/docs/imgs/phase_test_jobID1_1.pdf height="400" width="600"/>
+<img src=https://github.com/weichiyao/ScalarEMLP/blob/f093e00c709a8d083a80ae3326d982e47f6677c1/docs/imgs/phase_test_jobID1_1.pdf height="400" width="600"/>
+The above figure shows the ground truth and predictions of mass 1 (top) and 2 (bottom) in the phase space
+w.r.t. each dimension. Top 6 panels: Results from Experiment 1, where the test
+data are generated from the same distribution as those used for training. Here
+the dimensional scalar based MLPs exhibit slightly more accurate predictions for
+longer time scales. Bottom 6 panels: Results from Experiment 2, where we use
+the same test data in Experiment 1 but each with its inputs that have units of
+kg randomly scaled by a factor generated from Unif(3, 7). Here the dimensionless
+scalar based MLP is able to provide comparable performance to Experiment 1,
+while using the dimensional scalars gives much worse predictions
 
