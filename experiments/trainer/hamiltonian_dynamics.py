@@ -13,8 +13,6 @@ import numpy as np
 from functools import partial
 from itertools import islice
 import pickle
-from scalaremlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
-from scalaremlp.reps import T,Scalar
 from .classifier import Regressor,Classifier
 
 ## Code to rollout a Hamiltonian system
@@ -209,12 +207,7 @@ class DoubleSpringPendulum(HamiltonianDataset):
     """ The double spring pendulum dataset described in the paper."""
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
-        self.rep_in = 4*T(1)#Vector
-        self.rep_out = T(0)#Scalar
-        self.symmetry = O2eR3()
-        self.stats = (0,1,0,1)
-        
-
+     
     def H(self,z,zp):
         g = zp[...,:3]
         m1,m2 = zp[...,3], zp[...,4]
