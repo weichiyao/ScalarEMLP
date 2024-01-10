@@ -19,13 +19,13 @@ pip install -e .
 ```
 
 ### Modeling dynamical systems with symmetries
-We consider the task of learning the dynamics of a double pendulum with springs in 3-dimensional space, analogous to the numerical experiment from [Finzi et al. ICML 2021](https://arxiv.org/abs/2104.09459). The approach consists of learning the Hamiltonian that characterizes the dynamical system. Finzi at al. consider O(2) or SO(2) equivariance, because the behavior in the z-direction is not the same as the behavior in the xy-plane due to gravity. Our model considers the gravity vector to be an input of the hamiltonian and models the Hamiltonian as an O(3)-invariant function: $H(q_1,q_2,p_1,p_2,g,k_1,k_2,L_1,L_2,m_1,m_2)$ an invariant function of vectors indicating the positions of the masses, the momentums, the gravity vector, and the scalars corresponding to the constant of the springs, the natural lengths, and the masses.
+We consider the task of learning the dynamics of a double pendulum with springs in 3-dimensional space, analogous to the numerical experiment from [Finzi et al. ICML 2021](https://arxiv.org/abs/2104.09459). The approach consists of learning the Hamiltonian that characterizes the dynamical system. Finzi at al. consider O(2) or SO(2) equivariance, because the behavior in the z-direction is not the same as the behavior in the xy-plane due to gravity. Our model considers the gravity vector to be an input of the hamiltonian and models the Hamiltonian as an O(3)-invariant function: $H(\mathbf{q}_1(0),\mathbf{q}_2(0),\mathbf{p}_1(0),\mathbf{p}_2(0),\mathbf{g},k_1,k_2,L_1,L_2,m_1,m_2)$ an invariant function of vectors indicating the positions of the masses, the momentums, the gravity vector, and the scalars corresponding to the constant of the springs, the natural lengths, and the masses.
 
 Consider the following three experiments with the same training data. 
 The test data used in Experiment 1 is generated from the same distribution as the
 training dataset. The test data used in Experiment 2 consists of applying a transformation
 to the test data in Experiment 1, where each of the input parameters that include a power of
-kg in its units ($m_1$, $m_2$, $k_1$, $k_2$, $p_1(0)$ and $p_2(0)$) is scaled by a factor randomly generated
+kg in its units ($m_1$, $m_2$, $k_1$, $k_2$, $\mathbf{p}_1(0)$ and $\mathbf{p}_2(0)$) is scaled by a factor randomly generated
 from Unif(3, 7). The test data used in Experiment 3 has the input parameters $m_1$, $m_2$, $k_1$, $k_2$, $L_1$ and $L_2$ generated from 
 Unif(1, 5). We use the same training data $N=30000$ for all
 three experiments and each test set consists of 500 data points. That is, Experiments 2 and
