@@ -40,8 +40,6 @@ to train dimensionless Scalar-Based EMLP Hamiltonian Neural Networks.
 #### Figures to visualize scalar-based results for the springy dynamic system
 <img src=https://github.com/weichiyao/ScalarEMLP/blob/f70aa79effeeaedf5d91528e0179d14e21d045e9/docs/imgs/Experiment_1.png height="400" width="600"/>
 <img src=https://github.com/weichiyao/ScalarEMLP/blob/f0aae531b01810a7dd75a1b4b41ba1fbef00d326/docs/imgs/Experiment_2.png height="400" width="600"/>
-
-
 The above figure shows the ground truth and predictions of mass 1 (top) and 2 (bottom) in the phase space
 w.r.t. each dimension. Top 6 panels: Results from Experiment 1, where the test
 data are generated from the same distribution as those used for training. Here
@@ -50,5 +48,16 @@ longer time scales. Bottom 6 panels: Results from Experiment 2, where we use
 the same test data in Experiment 1 but each with its inputs that have units of
 kg randomly scaled by a factor generated from Unif(3, 7). Here the dimensionless
 scalar based MLP is able to provide comparable performance to Experiment 1,
-while using the dimensional scalars gives much worse predictions
+while using the dimensional scalars gives much worse predictions. 
 
+#### Tables for performance comparison
+<img src=https://github.com/weichiyao/ScalarEMLP/blob/7b4f8f2650a004053a2c18223b30b39d1a041b25/docs/imgs/Table_1vs2vs3.png height="100" width="400"/>
+The above table gives Geometric mean (standard deviation computed over 10 trials) of state relative
+errors of the springy pendulum over total time steps T=60. Results are shown for the dimensional
+vs dimensionless scalar-based Hamiltonian Neural Networks (implemented as an
+MLP) on three different test sets. Test data used in Experiment 1 are generated
+from the same distribution as the training dataset; test data used in Experiment 2
+using the same test data in Experiment 1 but each with its inputs that have units
+of kg randomly scaled by a factor generated from Unif(3, 7); test data used in
+Experiment 3 has mass m, scalar spring constant ks and natural spring length L
+generated from a different distribution.
