@@ -19,7 +19,7 @@ pip install -e .
 ```
 
 ### Modeling dynamical systems with symmetries
-We consider the task of learning the dynamics of a double pendulum with springs in 3-dimensional space, analogous to the numerical experiment from [Finzi et al. ICML 2021](https://arxiv.org/abs/2104.09459). The approach consists of learning the Hamiltonian that characterizes the dynamical system. Finzi at al. consider O(2) or SO(2) equivariance, because the behavior in the z-direction is not the same as the behavior in the xy-plane due to gravity. Our model considers the gravity vector to be an input of the hamiltonian and models the Hamiltonian as an O(3)-invariant function: ![formula](https://render.githubusercontent.com/render/math?math=H(q_1,q_2,p_1,p_2,g,k_1,k_2,L_1,L_2,m_1,m_2)) an invariant function of vectors indicating the positions of the masses, the momentums, the gravity vector, and the scalars corresponding to the constant of the springs, the natural lengths, and the masses.
+We consider the task of learning the dynamics of a double pendulum with springs in 3-dimensional space, analogous to the numerical experiment from [Finzi et al. ICML 2021](https://arxiv.org/abs/2104.09459). The approach consists of learning the Hamiltonian that characterizes the dynamical system. Finzi at al. consider O(2) or SO(2) equivariance, because the behavior in the z-direction is not the same as the behavior in the xy-plane due to gravity. Our model considers the gravity vector to be an input of the hamiltonian and models the Hamiltonian as an O(3)-invariant function: $H(q_1,q_2,p_1,p_2,g,k_1,k_2,L_1,L_2,m_1,m_2)$ an invariant function of vectors indicating the positions of the masses, the momentums, the gravity vector, and the scalars corresponding to the constant of the springs, the natural lengths, and the masses.
 
 Consider the following three experiments with the same training data. 
 The test data used in Experiment 1 is generated from the same distribution as the
@@ -31,15 +31,17 @@ Unif(1, 5). We use the same training data $N=30000$ for all
 three experiments and each test set consists of 500 data points. That is, Experiments 2 and
 3 have out-of-distribution test data, relative to their training data.
      
-For the dynamical systems modeling experiments you can use the scripts [`experiments/hnn_scalars.py`](experiments/hnn_scalars.py) 
+For the dynamical systems modeling experiments, you can run
 ```
 python experiments/hnn_scalars.py
 ```
 to train dimensionless Scalar-Based EMLP Hamiltonian Neural Networks.  
 
 #### Figures to visualize scalar-based results for the springy dynamic system
-<img src=https://github.com/weichiyao/ScalarEMLP/blob/f093e00c709a8d083a80ae3326d982e47f6677c1/docs/imgs/phase_test_jobID1_1.pdf height="400" width="600"/>
-<img src=https://github.com/weichiyao/ScalarEMLP/blob/f093e00c709a8d083a80ae3326d982e47f6677c1/docs/imgs/phase_test_jobID1_1.pdf height="400" width="600"/>
+<img src=https://github.com/weichiyao/ScalarEMLP/blob/f70aa79effeeaedf5d91528e0179d14e21d045e9/docs/imgs/Experiment_1.png height="400" width="600"/>
+<img src=https://github.com/weichiyao/ScalarEMLP/blob/f0aae531b01810a7dd75a1b4b41ba1fbef00d326/docs/imgs/Experiment_2.png height="400" width="600"/>
+
+
 The above figure shows the ground truth and predictions of mass 1 (top) and 2 (bottom) in the phase space
 w.r.t. each dimension. Top 6 panels: Results from Experiment 1, where the test
 data are generated from the same distribution as those used for training. Here
