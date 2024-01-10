@@ -3,21 +3,17 @@ from jax import grad, jit, vmap, jacfwd, jvp, vjp, random
 from jax.experimental.ode import odeint
 import jax.numpy as jnp
 import objax
-from oil.utils.utils import Named
 from oil.tuning.configGenerator import flatten_dict
 from oil.utils.utils import export
  
 import os
-import torch 
-import torch.nn as nn
+import torch  
 from torch.utils.data import Dataset
 import numpy as np 
-from functools import partial
-from itertools import islice
-import pickle
+from functools import partial 
 
-from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
-from emlp.reps import T,Scalar
+from scalaremlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
+from scalaremlp.reps import T,Scalar
 from .classifier import Regressor,Classifier
 #from emlp_jax.model_trainer import RegressorPlus
 

@@ -4,7 +4,7 @@ from scipy.linalg import expm
 from oil.utils.utils import Named,export
 import jax
 import jax.numpy as jnp
-from emlp.reps.linear_operators import LazyShift,SwapMatrix,Rot90,LazyKron,LazyKronsum,LazyPerm,I
+from scalaremlp.reps.linear_operators import LazyShift,SwapMatrix,Rot90,LazyKron,LazyKronsum,LazyPerm,I
 from jax import jit,vmap
 
 def rel_err(A,B):

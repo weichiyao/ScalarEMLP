@@ -6,8 +6,8 @@ import objax.nn as nn
 import jax
 from jax import jit
 import jax.numpy as jnp
-from emlp.reps import Scalar
-from emlp.reps.product_sum_reps import SumRep
+from scalaremlp.reps import Scalar
+from scalaremlp.reps.product_sum_reps import SumRep
 import logging
 import objax.functional as F
 from functools import partial

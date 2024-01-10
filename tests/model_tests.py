@@ -3,11 +3,11 @@ from jax import vmap
 import numpy as np
 import pytest
 from torch.utils.data import DataLoader
-from emlp.nn import uniform_rep,MLP,EMLP,Standardize
-import emlp
+from scalaremlp.nn import uniform_rep,MLP,EMLP,Standardize
+import scalaremlp
 from equivariance_tests import parametrize,rel_error,scale_adjusted_rel_error
 from oil.utils.utils import FixedNumpySeed, FixedPytorchSeed
-from emlp.datasets import Inertia,O5Synthetic,ParticleInteraction
+from scalaremlp.datasets import Inertia,O5Synthetic,ParticleInteraction
 from jax import random
 
 # def rel_err(a,b):
@@ -37,7 +37,7 @@ def get_dsmb(dsclass):
 
 @parametrize([Inertia,O5Synthetic,ParticleInteraction])
 def test_init_forward_and_equivariance(dsclass):
-    network=emlp.nn.objax.EMLP
+    network=scalaremlp.nn.objax.EMLP
     ds,mb = get_dsmb(dsclass)
     model = network(ds.rep_in,ds.rep_out,group=ds.symmetry)
     assert equivariance_err(model,mb,ds.rep_in,ds.rep_out,ds.symmetry) < 1e-4, "Objax EMLP failed equivariance test"
@@ -45,7 +45,7 @@ def test_init_forward_and_equivariance(dsclass):
 @parametrize([Inertia])
 def test_haiku_emlp(dsclass):
     import haiku as hk
-    from emlp.nn.haiku import EMLP as hkEMLP
+    from scalaremlp.nn.haiku import EMLP as hkEMLP
     network = hkEMLP
     ds,mb = get_dsmb(dsclass)
     net = network(ds.rep_in,ds.rep_out,group=ds.symmetry)
@@ -56,7 +56,7 @@ def test_haiku_emlp(dsclass):
 
 @parametrize([Inertia])
 def test_flax_emlp(dsclass):
-    from emlp.nn.flax import EMLP as flaxEMLP
+    from scalaremlp.nn.flax import EMLP as flaxEMLP
     network = flaxEMLP
     ds,mb = get_dsmb(dsclass)
     net = network(ds.rep_in,ds.rep_out,group=ds.symmetry)
@@ -67,7 +67,7 @@ def test_flax_emlp(dsclass):
 @parametrize([Inertia])
 def test_pytorch_emlp(dsclass):
     import torch
-    from emlp.nn.pytorch import EMLP as ptEMLP
+    from scalaremlp.nn.pytorch import EMLP as ptEMLP
     network=ptEMLP
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     ds,mb = get_dsmb(dsclass)

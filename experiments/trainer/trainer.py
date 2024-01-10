@@ -4,12 +4,6 @@ from oil.utils.utils import Eval, Named
 from oil.utils.mytqdm import tqdm
 from oil.tuning.study import guess_metric_sign
 import copy, os, random
-import glob
-import numpy as np
-from natsort import natsorted
-import jax
-import logging
-from functools import partial
 import objax
 
 class Trainer(object,metaclass=Named):

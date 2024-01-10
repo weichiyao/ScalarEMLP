@@ -1,7 +1,7 @@
 from oil.utils.utils import cosLr, FixedNumpySeed, FixedPytorchSeed
 from torch.utils.data import DataLoader
 from oil.datasetup.datasets import split_dataset
-from emlp.datasets import Inertia,O5Synthetic,ParticleInteraction
+from scalaremlp.datasets import Inertia,O5Synthetic,ParticleInteraction
 import torch
 import lightning.pytorch as pl
 

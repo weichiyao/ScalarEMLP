@@ -1,9 +1,9 @@
 
 import numpy as np#
 import copy
-from emlp.reps import *
-from emlp.groups import *
-from emlp.nn import uniform_rep
+from scalaremlp.reps import *
+from scalaremlp.groups import *
+from scalaremlp.nn import uniform_rep
 from equivariance_tests import parametrize,rel_error,scale_adjusted_rel_error
 import unittest
 from jax import vmap
