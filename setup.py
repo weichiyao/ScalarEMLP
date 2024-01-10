@@ -9,7 +9,7 @@ def get_property(prop, project):
 
 project_name = "ScalarEMLP"
 setup(name=project_name,
-      description="A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups",
+      description="Scalar-based Equivariant Machine Learning models",
       version= get_property('__version__',project_name),
       author='Weichi Yao',
       author_email='weichiy@umich.edu',
