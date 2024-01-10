@@ -15,10 +15,9 @@ import numpy as np
 from functools import partial
 from itertools import islice
 import pickle
-from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
-from emlp.reps import T,Scalar
+from scalaremlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
+from scalaremlp.reps import T,Scalar
 from .classifier import Regressor,Classifier
-#from emlp_jax.model_trainer import RegressorPlus
 
 ## Code to rollout a Hamiltonian system
 
