@@ -1,7 +1,7 @@
 
 import numpy as np
 from scipy.linalg import expm
-from oil.utils.utils import Named,export
+from scalaremlp.utils import Named,export
 import jax
 import jax.numpy as jnp
 from scalaremlp.reps.linear_operators import LazyShift,SwapMatrix,Rot90,LazyKron,LazyKronsum,LazyPerm,I

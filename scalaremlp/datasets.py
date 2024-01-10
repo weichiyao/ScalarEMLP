@@ -5,7 +5,7 @@ import numpy as np
 import jax.numpy as jnp
 from scalaremlp.reps import Scalar,Vector,T
 from torch.utils.data import Dataset
-from oil.utils.utils import export,Named,Expression,FixedNumpySeed
+from scalaremlp.utils import export
 from scalaremlp.groups import SO,O,Trivial,Lorentz,RubiksCube,Cube
 from functools import partial
 import itertools
