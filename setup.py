@@ -18,7 +18,7 @@ setup(name=project_name,
       install_requires=['h5py','objax','pytest','plum-dispatch',
             'optax','tqdm>=4.38','pytorch-lightning','lightning'],
       extras_require = {
-          'EXPTS':['olive-oil-ml']
+          'EXPTS':['olive-oil-ml>=0.1.1']
       },
       packages=find_packages(),
       long_description=open('README.md').read(),
