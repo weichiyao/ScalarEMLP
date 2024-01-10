@@ -31,7 +31,7 @@ The neural networks used for this example are multi-layer perceptrons based on t
 
 For example, given 3000 training datasets, you can run the following codes with `ntrain=3000`, which produce the test MSE results from  the neural networks based on the scalars `<xi,xj>, i,j=1,2`.
 ```python
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from train_regression_scalars import makeTrainerScalars
 
 ntrain=3000
