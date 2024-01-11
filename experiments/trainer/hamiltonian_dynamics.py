@@ -1,19 +1,19 @@
 import jax 
-from jax import grad, jit, vmap, jacfwd, jvp, vjp, random
+from jax import grad, jit, vmap 
 from jax.experimental.ode import odeint
 import jax.numpy as jnp
 import objax
-from oil.utils.utils import export, flatten_dict
+from oil.utils.utils import export 
+from oil.tuning.configGenerator import flatten_dict
+
  
 import os
-import torch 
-import torch.nn as nn
+import torch  
 from torch.utils.data import Dataset
 import numpy as np 
-from functools import partial
-from itertools import islice
+from functools import partial 
 import pickle
-from .classifier import Regressor,Classifier
+from .classifier import Regressor 
 
 ## Code to rollout a Hamiltonian system
 
