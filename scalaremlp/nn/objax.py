@@ -37,12 +37,11 @@ def comp_inner_products(x, take_sqrt=True):
 
 
 @export
-def compute_scalars(x):
+def compute_scalars(x, g=np.array([0,0,-1])):
     """Input x of dim [n, 4, 3]"""
     x = np.array(x)    
     xx = comp_inner_products(x)  # (n,20)
 
-    g  = np.array([0,0,-1])
     xg = np.inner(g, x) # (n,4)
 
     y  = x[:,0,:] - x[:,1,:] # x1-x2 (n,3)
