@@ -51,8 +51,14 @@ def dataset_transform(data):
         ri = X[:,n:].reshape(-1,n,3)
         x_outer = torch.einsum('bik,bjl->bijkl', ri, ri) #[N, n, n, dim, dim]
         x_inner = torch.einsum('bik,bjk->bij', ri, ri) #[N, n, n]
-        index = np.array(list(itertools.combinations_with_replacement(np.arange(0,n), r=2)))
-
+        index = np.array([
+             [0,0],[1,1],[2,2],[3,3],[4,4],
+             [0,1],[0,2],[0,3],[0,4],
+             [1,2],[1,3],[1,4], 
+             [2,3],[2,4], 
+             [3,4],    
+         ]) 
+        
         N = len(X)
         X = X.new_zeros(N, 16, 3, 3)
         X[:,:15,:,:] = x_outer[:,index[:,0],index[:,1],:,:]
